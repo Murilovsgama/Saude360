@@ -22,6 +22,64 @@ import {
 import type { SearchProgress } from '@/shared/services/retry';
 import type { State, City, HealthUnit, SearchResult } from '@/shared/types/health';
 
+const locating = ref(false);
+let locationRequest = 0;
+const nearby = ref(false);
+const position = ref<{ latitude: number; longitude: number } | null>(null);
+const locationNotice = ref('');
+function distance(unit: HealthUnit): number {
+  if (!position.value) return Infinity;
+  const radians = (value: number) => (value * Math.PI) / 180;
+  const lat = radians(unit.latitude - position.value.latitude);
+  const lon = radians(unit.longitude - position.value.longitude);
+  const a =
+    Math.sin(lat / 2) ** 2 +
+    Math.cos(radians(position.value.latitude)) *
+      Math.cos(radians(unit.latitude)) *
+      Math.sin(lon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+async function useLocation(): Promise<void> {
+  if (!navigator.geolocation) {
+    locationNotice.value = 'Seu navegador não oferece localização. Escolha a região manualmente.';
+    return;
+  }
+  const request = ++locationRequest;
+  locating.value = true;
+  locationNotice.value = '';
+  try {
+    const current = await new Promise<GeolocationPosition>((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        timeout: 15000,
+        maximumAge: 60000,
+      }),
+    );
+    if (request !== locationRequest) return;
+    resetSearch();
+    position.value = { latitude: current.coords.latitude, longitude: current.coords.longitude };
+    nearby.value = true;
+    searching.value = true;
+    searchedCity.value = 'até 30 km da sua localização · cobertura publicada';
+    const responses = await Promise.all(publishedCities.map(({ id }) => getHealthUnits(id)));
+    if (request !== locationRequest) return;
+    const units = responses
+      .flatMap((item) => item.units)
+      .filter((unit) => distance(unit) <= 30)
+      .sort((a, b) => distance(a) - distance(b));
+    const oldest = responses.reduce((a, b) =>
+      (a.publishedAt || '') < (b.publishedAt || '') ? a : b,
+    );
+    result.value = { ...oldest, units };
+    locationNotice.value =
+      'Distâncias em linha reta. Apenas unidades dos dez municípios cobertos, até 30 km. A unidade mais próxima pode não ser a referência do seu endereço.';
+  } catch {
+    locationNotice.value =
+      'Não foi possível usar a localização ou carregar as unidades. Verifique a permissão e a conexão, ou escolha a região manualmente.';
+  } finally {
+    locating.value = false;
+    searching.value = false;
+  }
+}
 const route = useRoute();
 const router = useRouter();
 const states = ref<State[]>([{ id: 35, sigla: 'SP', nome: 'São Paulo' }]);
@@ -112,6 +170,8 @@ function errorMessage(error: unknown, fallback: string): string {
     : fallback;
 }
 function resetSearch(): void {
+  nearby.value = false;
+  position.value = null;
   searchController?.abort();
   searching.value = false;
   result.value = null;
@@ -162,7 +222,7 @@ watch(
 watch(
   [capitalRegion, kind],
   () => {
-    if (!restoring) resetSearch();
+    if (!restoring && !nearby.value) resetSearch();
   },
   { flush: 'sync' },
 );
@@ -260,6 +320,7 @@ onMounted(async () => {
   await restore();
 });
 onBeforeUnmount(() => {
+  locationRequest++;
   clearInterval(ticker);
   locationController?.abort();
   searchController?.abort();
@@ -272,6 +333,8 @@ async function retryLocations(): Promise<void> {
   } else await loadCities();
 }
 function cancelSearch(): void {
+  locationRequest++;
+  locating.value = false;
   searchController?.abort();
   searching.value = false;
   progress.value = null;
@@ -325,73 +388,82 @@ function clearFilters(): void {
           <p>Selecione a cidade e refine a área para uma consulta mais rápida.</p>
         </div>
       </div>
-      <form
-        class="search-form"
-        :class="{ 'search-form-regional': state === 'SP' }"
-        @submit.prevent="submit"
-      >
-        <div v-if="state === 'SP'" class="field area-field">
-          <label for="city-group">Área de busca</label>
-          <select
-            id="city-group"
-            v-model="cityGroup"
-            :disabled="loadingCities || restoring"
-            aria-describedby="area-help"
-          >
-            <option v-for="group in cityGroups" :key="group.id" :value="group.id">
-              {{ group.label }}
-            </option>
-          </select>
-        </div>
-        <div class="field city-field">
-          <label for="city">Cidade</label
-          ><select
-            id="city"
-            v-model="city"
-            :disabled="!state || loadingCities || restoring"
-            required
-          >
-            <option value="">
-              {{ loadingCities ? 'Carregando cidades…' : 'Selecione a cidade' }}
-            </option>
-            <option v-for="item in cityOptions" :key="item.id" :value="String(item.id)">
-              {{ item.nome }}
-            </option>
-          </select>
-        </div>
-        <div v-if="needsCapitalRegion" class="field region-field">
-          <label for="capital-region">Região de São Paulo</label>
-          <select
-            id="capital-region"
-            v-model="capitalRegion"
-            required
-            :disabled="restoring"
-            aria-describedby="region-help"
-          >
-            <option value="">Selecione a região</option>
-            <option v-for="region in capitalRegions" :key="region.id" :value="region.id">
-              {{ region.label }}
-            </option>
-          </select>
-        </div>
-        <div class="field type-field">
-          <label for="unit-type">Tipo de unidade</label
-          ><select id="unit-type" v-model="kind">
-            <option value="all">UBS e UPA</option>
-            <option value="UBS">UBS · Atenção básica</option>
-            <option value="UPA">UPA · Pronto atendimento</option>
-          </select>
-        </div>
-        <button
-          type="submit"
-          class="primary-button search-submit"
-          :disabled="!canSearch || searching || loadingCities || restoring"
+      <button class="primary-button" :disabled="locating || searching" @click="useLocation">
+        <Icon name="pin" :size="18" />{{ locating ? 'Localizando…' : 'Usar minha localização' }}
+      </button>
+      <p class="area-help">
+        Autorize a localização para ver unidades próximas ou escolha sua região abaixo.
+      </p>
+      <p v-if="locationNotice" class="area-help" role="status">{{ locationNotice }}</p>
+      <fieldset :disabled="locating" style="border: 0; padding: 0; margin: 0; min-width: 0">
+        <form
+          class="search-form"
+          :class="{ 'search-form-regional': state === 'SP' }"
+          @submit.prevent="submit"
         >
-          <span v-if="searching" class="spinner" /><Icon v-else name="search" :size="18" />{{
-            searching ? 'Buscando…' : 'Buscar unidades'
-          }}
-        </button>
-      </form>
+          <div v-if="state === 'SP'" class="field area-field">
+            <label for="city-group">Área de busca</label>
+            <select
+              id="city-group"
+              v-model="cityGroup"
+              :disabled="loadingCities || restoring"
+              aria-describedby="area-help"
+            >
+              <option v-for="group in cityGroups" :key="group.id" :value="group.id">
+                {{ group.label }}
+              </option>
+            </select>
+          </div>
+          <div class="field city-field">
+            <label for="city">Cidade</label
+            ><select
+              id="city"
+              v-model="city"
+              :disabled="!state || loadingCities || restoring"
+              required
+            >
+              <option value="">
+                {{ loadingCities ? 'Carregando cidades…' : 'Selecione a cidade' }}
+              </option>
+              <option v-for="item in cityOptions" :key="item.id" :value="String(item.id)">
+                {{ item.nome }}
+              </option>
+            </select>
+          </div>
+          <div v-if="needsCapitalRegion" class="field region-field">
+            <label for="capital-region">Região de São Paulo</label>
+            <select
+              id="capital-region"
+              v-model="capitalRegion"
+              required
+              :disabled="restoring"
+              aria-describedby="region-help"
+            >
+              <option value="">Selecione a região</option>
+              <option v-for="region in capitalRegions" :key="region.id" :value="region.id">
+                {{ region.label }}
+              </option>
+            </select>
+          </div>
+          <div class="field type-field">
+            <label for="unit-type">Tipo de unidade</label
+            ><select id="unit-type" v-model="kind">
+              <option value="all">UBS e UPA</option>
+              <option value="UBS">UBS · Atenção básica</option>
+              <option value="UPA">UPA · Pronto atendimento</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            class="primary-button search-submit"
+            :disabled="!canSearch || searching || loadingCities || restoring"
+          >
+            <span v-if="searching" class="spinner" /><Icon v-else name="search" :size="18" />{{
+              searching ? 'Buscando…' : 'Buscar unidades'
+            }}
+          </button>
+        </form>
+      </fieldset>
       <p v-if="state === 'SP'" id="area-help" class="area-help">
         O Grande ABC reúne sete municípios. Escolha uma cidade por consulta; Suzano e Guarulhos
         também têm buscas próprias.
@@ -550,6 +622,7 @@ function clearFilters(): void {
             v-for="unit in visibleUnits"
             :key="unit.id"
             :unit="unit"
+            :distance-km="nearby ? distance(unit) : undefined"
             @select="selectedUnit = $event"
           />
         </div>

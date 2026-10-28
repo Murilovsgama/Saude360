@@ -120,3 +120,7 @@ npm run preview
 ```
 
 Publique toda a pasta `dist`, incluindo `data/`. A base relativa e as rotas em hash permitem hospedagem estática em subdiretórios. Os recortes publicados não precisam de um servidor de aplicação; os mapas e consultas fora da cobertura seguem as políticas dos respectivos provedores.
+
+### Localização opcional
+
+O botão Usar minha localização solicita permissão somente ao ser acionado (requer HTTPS ou localhost). Coordenadas ficam em memória e não são incluídas no cache. São consultados os dez arquivos publicados e exibidas unidades até 30 km, com distância em linha reta. Isso não determina a cidade do usuário nem garante cobertura fora dos municípios publicados. Google Maps e Waze recebem somente as coordenadas do destino nos links de rota.

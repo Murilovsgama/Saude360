@@ -70,8 +70,15 @@ function phoneHref(phone: string): string {
         funcionamento atual ou disponibilidade de serviços.
       </p>
       <div class="detail-actions">
+        <a
+          :href="`https://www.waze.com/ul?ll=${unit.latitude}%2C${unit.longitude}&amp;navigate=yes`"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="secondary-button"
+          >Waze</a
+        >
         <a :href="routeUrl(unit)" target="_blank" rel="noopener noreferrer" class="primary-button"
-          ><Icon name="map" :size="18" />Traçar rota</a
+          ><Icon name="map" :size="18" />Google Maps</a
         ><a
           :href="unit.sourceUrl"
           target="_blank"

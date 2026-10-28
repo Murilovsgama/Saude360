@@ -137,14 +137,14 @@ function date(value: string): string {
       <section class="reading-card">
         <h2>Cache e privacidade</h2>
         <p>
-          Resultados válidos são reutilizados por 15 minutos e podem ficar salvos por até sete dias
-          neste navegador, com limite de 20 consultas. Se uma atualização falhar, mostramos os dados
-          anteriores com aviso e data. Sem dados válidos disponíveis, mostramos indisponibilidade.
+          Consultas podem ficar salvas neste navegador para agilizar novas buscas. A fonte e a data
+          dos dados são exibidas nos resultados.
         </p>
         <p>
-          Não há cadastro, dados de pacientes, rastreadores ou solicitação de geolocalização. O
-          cache contém filtros e informações públicas das unidades. Fontes externas e mapas recebem
-          as requisições normais do navegador. Links de rota abrem outro serviço.
+          A localização é opcional, solicitada somente ao tocar no botão e usada em memória para
+          ordenar unidades próximas. Não salvamos suas coordenadas. Não há cadastro ou dados de
+          pacientes. O cache contém filtros e informações públicas das unidades. Fontes externas e
+          mapas recebem as requisições normais do navegador. Links de rota abrem outro serviço.
         </p>
       </section>
     </div>
