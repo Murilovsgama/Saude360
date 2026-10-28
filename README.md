@@ -6,12 +6,13 @@ O objetivo é aproximar a população das informações sobre a rede de saúde, 
 
 ## Funcionalidades
 
-- Busca por estado e município.
+- Busca por estado e município, com recorte obrigatório por Centro, Zona Leste, Norte, Oeste ou Sul na capital paulista.
+- Atalhos para Grande ABC, Suzano e Guarulhos; cada consulta continua restrita a um município.
 - Filtros por tipo de unidade, nome, rua e bairro.
 - Resultados em lista com paginação e mapa interativo.
 - Detalhes com endereço, telefone, horário e responsável, quando disponíveis na fonte.
 - Link para traçar rota e consultar o registro original.
-- URL compartilhável com município, tipo e termo da busca no momento do envio do formulário.
+- URL compartilhável com município, região, tipo e termo da busca no momento do envio do formulário.
 - Guia sobre UBS e UPA e página de fontes e transparência.
 - Estados de carregamento, erro, tentativa novamente e ausência de resultados.
 
@@ -23,14 +24,15 @@ A aplicação é inteiramente front-end. Não possui backend, banco de dados, au
 
 ## Fontes públicas
 
-| Fonte                                                                            | Uso                                                                      |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [IBGE — Localidades](https://servicodados.ibge.gov.br/api/docs/localidades)      | Estados, municípios e seus códigos.                                      |
-| [OpenStreetMap — Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) | Consulta de locais de saúde mapeados dentro do município.                |
-| [OpenStreetMap — mapas](https://www.openstreetmap.org/copyright)                 | Camada visual do mapa. Dados © colaboradores do OpenStreetMap, sob ODbL. |
-| [Ministério da Saúde](https://www.gov.br/saude/)                                 | Referências do guia de atendimento.                                      |
+| Fonte                                                                            | Uso                                                                             |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [IBGE — Localidades](https://servicodados.ibge.gov.br/api/docs/localidades)      | Estados, municípios e seus códigos.                                             |
+| [OpenStreetMap — Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) | Consulta de locais de saúde mapeados dentro do município.                       |
+| [GeoSampa — Subprefeituras](https://geosampa.prefeitura.sp.gov.br/)              | Limites das cinco regiões da capital, agrupados a partir das 32 subprefeituras. |
+| [OpenStreetMap — mapas](https://www.openstreetmap.org/copyright)                 | Camada visual do mapa. Dados © colaboradores do OpenStreetMap, sob ODbL.        |
+| [Ministério da Saúde](https://www.gov.br/saude/)                                 | Referências do guia de atendimento.                                             |
 
-A consulta Overpass usa a área administrativa identificada pelo código IBGE de sete dígitos. As unidades são selecionadas pelo nome e pelas marcações de saúde do OpenStreetMap. Essa identificação é indicativa: não comprova vínculo com o SUS ou funcionamento atual. Locais explicitamente marcados como privados são excluídos.
+Fora da capital, a consulta Overpass usa a área administrativa identificada pelo código IBGE de sete dígitos. Em São Paulo, um retângulo geográfico da região selecionada reduz a busca no servidor; os resultados são refinados no navegador pelos polígonos do GeoSampa. Assim, uma busca na Zona Leste não carrega todas as unidades da capital. O tipo de unidade também é aplicado na consulta externa. As unidades são selecionadas pelo nome e pelas marcações de saúde do OpenStreetMap. Essa identificação é indicativa: não comprova vínculo com o SUS ou funcionamento atual. Locais explicitamente marcados como privados são excluídos.
 
 Não há dados fictícios de unidades como alternativa às APIs. Uma resposta vazia é apresentada como ausência de resultados no mapa, sem afirmar que o município não tem atendimento.
 
@@ -46,7 +48,19 @@ Não há dados fictícios de unidades como alternativa às APIs. Uma resposta va
 
 O endpoint CNES avaliado não retornou o cabeçalho CORS necessário para uma integração direta no navegador. Ele não é consumido por um proxy externo. Por isso, esta versão utiliza OpenStreetMap e apresenta o CNES apenas como referência oficial externa.
 
-As consultas de unidades são reutilizadas por até cinco minutos em memória por município. Nenhuma localização ou informação de pacientes é armazenada. Os provedores externos recebem as requisições normais do navegador.
+As consultas de unidades são reutilizadas por até cinco minutos em memória por município, região e tipo. São enviadas por POST à instância Private.coffee da Overpass; em caso de falha de rede, timeout ou erro de servidor, há uma única tentativa sequencial na instância overpass-api.de. Cancelamento pelo usuário e limite de requisições não causam nova tentativa automática. Nenhuma localização ou informação de pacientes é armazenada. Os provedores externos recebem as requisições normais do navegador.
+
+### Limites regionais de São Paulo
+
+O arquivo `src/shared/data/saoPauloRegions.json` contém um recorte dos polígonos públicos de subprefeituras do GeoSampa, agrupados pelo campo `nm_regiao_05`. A geometria é simplificada com tolerância de 0,00005 grau (cerca de cinco metros). O filtro serve para navegação, não para fins cadastrais; registros nas divisas podem variar.
+
+A origem, a data de obtenção e a tolerância estão registradas no arquivo. O site não depende do WFS do GeoSampa durante cada busca. Para atualizar o recorte a partir da fonte pública:
+
+```bash
+python scripts/update-sp-regions.py
+```
+
+As sete cidades do Grande ABC são Diadema, Mauá, Ribeirão Pires, Rio Grande da Serra, Santo André, São Bernardo do Campo e São Caetano do Sul, conforme o [Consórcio Intermunicipal Grande ABC](https://consorcioabc.sp.gov.br/). Suzano e Guarulhos são opções municipais próprias, sem serem tratadas como zonas da capital.
 
 ## Executar
 

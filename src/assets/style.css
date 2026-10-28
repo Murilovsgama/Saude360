@@ -1522,3 +1522,29 @@ em {
     scroll-behavior: auto !important;
   }
 }
+
+/* O recorte geográfico faz parte da consulta, antes de carregar as unidades. */
+.search-form-regional {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.search-form-regional .search-submit {
+  width: 100%;
+}
+.area-help {
+  font-size: 11px;
+  color: #657b96;
+  margin-top: 12px;
+}
+@media (max-width: 1200px) {
+  .search-form-regional {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .search-form-regional {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .search-form-regional .field {
+    grid-column: 1 / -1;
+  }
+}

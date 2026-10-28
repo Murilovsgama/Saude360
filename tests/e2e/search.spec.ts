@@ -2,7 +2,18 @@ import { test, expect, type Page } from '@playwright/test';
 async function mockLocations(page: Page): Promise<void> {
   await page.route('**/api/v1/localidades/**', async (route) => {
     const data = route.request().url().includes('/municipios')
-      ? [{ id: 3550308, nome: 'São Paulo' }]
+      ? [
+          { id: 3550308, nome: 'São Paulo' },
+          { id: 3513801, nome: 'Diadema' },
+          { id: 3529401, nome: 'Mauá' },
+          { id: 3543303, nome: 'Ribeirão Pires' },
+          { id: 3544103, nome: 'Rio Grande da Serra' },
+          { id: 3547809, nome: 'Santo André' },
+          { id: 3548708, nome: 'São Bernardo do Campo' },
+          { id: 3548807, nome: 'São Caetano do Sul' },
+          { id: 3518800, nome: 'Guarulhos' },
+          { id: 3552502, nome: 'Suzano' },
+        ]
       : [{ id: 35, sigla: 'SP', nome: 'São Paulo' }];
     await route.fulfill({ json: data });
   });
@@ -12,11 +23,12 @@ async function mockLocations(page: Page): Promise<void> {
 async function chooseCity(page: Page): Promise<void> {
   await page.getByLabel('Estado', { exact: true }).selectOption('SP');
   await page.getByLabel('Cidade', { exact: true }).selectOption('3550308');
+  await page.getByLabel('Região de São Paulo', { exact: true }).selectOption('centro');
   await page.getByRole('button', { name: 'Buscar unidades', exact: true }).click();
 }
 test('busca, filtra, abre detalhes e alterna para o mapa', async ({ page }) => {
   await mockLocations(page);
-  await page.route('https://overpass-api.de/api/interpreter**', (route) =>
+  await page.route('https://overpass.private.coffee/api/interpreter**', (route) =>
     route.fulfill({
       json: {
         elements: [
@@ -70,7 +82,7 @@ test('busca, filtra, abre detalhes e alterna para o mapa', async ({ page }) => {
 });
 test('explica ausência de dados sem afirmar ausência de atendimento', async ({ page }) => {
   await mockLocations(page);
-  await page.route('https://overpass-api.de/api/interpreter**', (route) =>
+  await page.route('https://overpass.private.coffee/api/interpreter**', (route) =>
     route.fulfill({ json: { elements: [] } }),
   );
   await page.goto('/');
@@ -81,7 +93,7 @@ test('explica ausência de dados sem afirmar ausência de atendimento', async ({
 test('trata indisponibilidade e permite repetir a consulta', async ({ page }) => {
   await mockLocations(page);
   let requests = 0;
-  await page.route('https://overpass-api.de/api/interpreter**', (route) => {
+  await page.route('https://overpass.private.coffee/api/interpreter**', (route) => {
     requests++;
     return route.fulfill(requests === 1 ? { status: 429, body: '' } : { json: { elements: [] } });
   });
@@ -93,10 +105,10 @@ test('trata indisponibilidade e permite repetir a consulta', async ({ page }) =>
 });
 test('restaura cidade e tipo de uma URL compartilhada', async ({ page }) => {
   await mockLocations(page);
-  await page.route('https://overpass-api.de/api/interpreter**', (route) =>
+  await page.route('https://overpass.private.coffee/api/interpreter**', (route) =>
     route.fulfill({ json: { elements: [] } }),
   );
-  await page.goto('/#/?uf=SP&cidade=3550308&tipo=UPA');
+  await page.goto('/#/?uf=SP&cidade=3550308&tipo=UPA&regiao=centro');
   await expect(page.getByLabel('Cidade', { exact: true })).toHaveValue('3550308');
   await expect(page.getByLabel('Tipo de unidade')).toHaveValue('UPA');
   await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
@@ -137,4 +149,77 @@ test('permite tentar novamente quando a lista de estados falha', async ({ page }
   await page.getByRole('button', { name: 'Tentar novamente' }).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByRole('option', { name: 'São Paulo (SP)' })).toHaveCount(1);
+});
+
+test('limita a capital pela região antes da requisição e preserva o recorte na URL', async ({
+  page,
+}) => {
+  await mockLocations(page);
+  let query = '';
+  await page.route('https://overpass.private.coffee/api/interpreter**', (route) => {
+    query = new URLSearchParams(route.request().postData() || '').get('data') || '';
+    return route.fulfill({ json: { elements: [] } });
+  });
+  await page.goto('/');
+  await page.getByLabel('Estado', { exact: true }).selectOption('SP');
+  await page.getByLabel('Área de busca', { exact: true }).selectOption('capital');
+  await expect(page.getByLabel('Cidade', { exact: true })).toHaveValue('3550308');
+  await expect(page.getByRole('button', { name: 'Buscar unidades', exact: true })).toBeDisabled();
+  await page.getByLabel('Região de São Paulo', { exact: true }).selectOption('leste');
+  await page.getByLabel('Tipo de unidade').selectOption('UBS');
+  await page.getByRole('button', { name: 'Buscar unidades', exact: true }).click();
+  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
+  expect(query).toContain('nwr(');
+  expect(query).not.toContain('area.city');
+  expect(query).not.toContain('UBS|UPA');
+  await expect(page).toHaveURL(/regiao=leste/);
+  await expect(
+    page.getByRole('heading', { name: 'Unidades em São Paulo · Zona Leste · SP' }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Região de São Paulo', { exact: true })).toHaveValue('leste');
+  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
+});
+
+test('mantém ABC, Suzano e Guarulhos em buscas municipais distintas', async ({ page }) => {
+  await mockLocations(page);
+  const queries: string[] = [];
+  await page.route('https://overpass.private.coffee/api/interpreter**', (route) => {
+    queries.push(new URLSearchParams(route.request().postData() || '').get('data') || '');
+    return route.fulfill({ json: { elements: [] } });
+  });
+  await page.goto('/');
+  await page.getByLabel('Estado', { exact: true }).selectOption('SP');
+  await page.getByLabel('Área de busca', { exact: true }).selectOption('abc');
+  await expect(page.locator('#city option')).toHaveCount(8);
+  await expect(page.locator('#city option[value="3518800"]')).toHaveCount(0);
+  await page.getByLabel('Cidade', { exact: true }).selectOption('3548807');
+  await expect(page.getByLabel('Região de São Paulo', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Buscar unidades', exact: true }).click();
+  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
+  expect(queries[0]).toContain('"ref:IBGE"="3548807"');
+  for (const [group, city] of [
+    ['suzano', '3552502'],
+    ['guarulhos', '3518800'],
+  ]) {
+    await page.getByLabel('Área de busca', { exact: true }).selectOption(group);
+    await expect(page.getByLabel('Cidade', { exact: true })).toHaveValue(city);
+    await page.getByRole('button', { name: 'Buscar unidades', exact: true }).click();
+    await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
+    expect(queries.at(-1)).toContain(`"ref:IBGE"="${city}"`);
+  }
+});
+
+test('não dispara consulta da capital inteira ao abrir link antigo sem região', async ({
+  page,
+}) => {
+  await mockLocations(page);
+  let requests = 0;
+  await page.route('https://overpass.private.coffee/api/interpreter**', (route) => {
+    requests++;
+    return route.fulfill({ json: { elements: [] } });
+  });
+  await page.goto('/#/?uf=SP&cidade=3550308');
+  await expect(page.getByRole('status')).toContainText('Selecione uma região');
+  expect(requests).toBe(0);
 });

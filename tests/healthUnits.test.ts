@@ -93,14 +93,71 @@ describe('consultas externas', () => {
       'fetch',
       vi
         .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ elements: [], remark: 'runtime error: timeout' })),
+        .mockImplementation(() =>
+          Promise.resolve(
+            new Response(JSON.stringify({ elements: [], remark: 'runtime error: timeout' })),
+          ),
         ),
     );
     await expect(getHealthUnits('1100023')).rejects.toThrow('não foi concluída');
   });
   it('trata o limite da API sem apresentar lista vazia como resultado', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 429 })));
-    await expect(getJson('https://example.com')).rejects.toThrow('ocupada');
+    await expect(getJson('https://example.com')).rejects.toThrow('limite');
+  });
+});
+
+describe('recortes e disponibilidade da busca', () => {
+  it('usa POST e tenta a segunda instância uma única vez se a primeira falhar', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ elements: [] })));
+    vi.stubGlobal('fetch', fetchMock);
+    await getHealthUnits('3518800', undefined, { type: 'UPA' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toContain('private.coffee');
+    expect(fetchMock.mock.calls[1][0]).toContain('overpass-api.de');
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+  });
+  it('não troca de servidor nem repete a busca após limite de requisições', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('', { status: 429 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(getHealthUnits('3552502', undefined, { type: 'UPA' })).rejects.toThrow('limite');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it('não tenta outro servidor se a busca foi cancelada pelo usuário', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockImplementation(() => {
+      controller.abort();
+      throw new DOMException('Aborted', 'AbortError');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(getHealthUnits('3513801', controller.signal)).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+  it('separa cache por região e tipo e exclui unidades fora do recorte', async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            elements: [
+              { type: 'node', id: 1, lat: -23.54, lon: -46.455, tags: { name: 'UBS Itaquera' } },
+              { type: 'node', id: 2, lat: -23.566, lon: -46.693, tags: { name: 'UBS Pinheiros' } },
+              { type: 'node', id: 3, lat: -23.54, lon: -46.455, tags: { name: 'UPA Itaquera' } },
+            ],
+          }),
+        ),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const east = await getHealthUnits('3550308', undefined, { region: 'leste', type: 'UBS' });
+    const west = await getHealthUnits('3550308', undefined, { region: 'oeste', type: 'UBS' });
+    const emergency = await getHealthUnits('3550308', undefined, { region: 'leste', type: 'UPA' });
+    expect(east.units.map((unit) => unit.name)).toEqual(['UBS Itaquera']);
+    expect(west.units.map((unit) => unit.name)).toEqual(['UBS Pinheiros']);
+    expect(emergency.units.map((unit) => unit.name)).toEqual(['UPA Itaquera']);
+    await getHealthUnits('3550308', undefined, { region: 'leste', type: 'UBS' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

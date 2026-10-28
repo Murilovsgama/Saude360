@@ -42,14 +42,33 @@ import Icon from '@/shared/components/Icon.vue';
           /></a>
         </div>
       </div>
+      <div class="source-row">
+        <span class="section-icon"><Icon name="pin" /></span>
+        <div>
+          <h3>GeoSampa · Prefeitura de São Paulo</h3>
+          <p>
+            Limites das cinco regiões da capital, agrupados pelas subprefeituras e simplificados em
+            cerca de cinco metros. O recorte é atualizado junto ao projeto.
+          </p>
+          <a
+            href="https://geosampa.prefeitura.sp.gov.br/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-button"
+            >Consultar a fonte dos limites <Icon name="external" :size="14"
+          /></a>
+        </div>
+      </div>
     </section>
     <div class="guide-grid">
       <section class="reading-card">
         <h2>Como os resultados são selecionados</h2>
         <p>
-          A busca considera locais de saúde mapeados dentro do município. A identificação de UBS e
-          UPA usa o nome cadastrado, incluindo termos como Unidade Básica, Saúde da Família e Pronto
-          Atendimento.
+          A busca considera locais de saúde mapeados dentro do município. Na capital paulista, é
+          necessário escolher uma das cinco regiões: a consulta usa um retângulo menor e refina os
+          resultados com limites simplificados do GeoSampa. Os limites são aproximados em alguns
+          metros, especialmente nas divisas. A identificação de UBS e UPA usa o nome cadastrado,
+          incluindo termos como Unidade Básica, Saúde da Família e Pronto Atendimento.
         </p>
         <p>
           Essa classificação é indicativa e não comprova vínculo com o SUS. Registros explicitamente
@@ -61,8 +80,8 @@ import Icon from '@/shared/components/Icon.vue';
         <h2>Atualização e privacidade</h2>
         <p>
           A consulta é feita ao abrir uma busca. O resultado pode ser reutilizado por até cinco
-          minutos na memória da página. A data da consulta não significa que o cadastro da unidade
-          foi atualizado naquela data.
+          minutos na memória da página, por cidade, região e tipo. A data da consulta não significa
+          que o cadastro da unidade foi atualizado naquela data.
         </p>
         <p>
           Não há cadastro, dados de pacientes, rastreadores ou armazenamento de localização. As APIs

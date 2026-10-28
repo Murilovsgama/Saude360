@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Icon from '@/shared/components/Icon.vue';
 import UnitCard from '@/shared/components/UnitCard.vue';
 import UnitDetails from '@/shared/components/UnitDetails.vue';
-import UnitsMap from '@/shared/components/UnitsMap.vue';
+const UnitsMap = defineAsyncComponent(() => import('@/shared/components/UnitsMap.vue'));
 import { getStates, getCities } from '@/shared/services/locations';
 import { getHealthUnits, normalizeText } from '@/shared/services/healthUnits';
+import {
+  capitalId,
+  capitalRegions,
+  cityGroups,
+  citiesInGroup,
+  getCapitalRegion,
+} from '@/shared/services/regions';
 import type { State, City, HealthUnit, SearchResult } from '@/shared/types/health';
 
 const route = useRoute();
@@ -15,6 +22,16 @@ const states = ref<State[]>([]);
 const cities = ref<City[]>([]);
 const state = ref('');
 const city = ref('');
+const cityGroup = ref('all');
+const capitalRegion = ref('');
+const cityOptions = computed(() =>
+  state.value === 'SP' ? citiesInGroup(cities.value, cityGroup.value) : cities.value,
+);
+const needsCapitalRegion = computed(() => city.value === capitalId);
+const canSearch = computed(
+  () => !!city.value && (!needsCapitalRegion.value || !!getCapitalRegion(capitalRegion.value)),
+);
+const searchHint = ref('');
 const kind = ref('all');
 const term = ref('');
 const neighborhood = ref('');
@@ -77,6 +94,7 @@ function resetSearch(): void {
   searchError.value = '';
   neighborhood.value = '';
   selectedUnit.value = null;
+  searchHint.value = '';
 }
 async function loadStates(): Promise<void> {
   loadingStates.value = true;
@@ -124,6 +142,8 @@ watch(
   async () => {
     if (restoring) return;
     city.value = '';
+    cityGroup.value = 'all';
+    capitalRegion.value = '';
     resetSearch();
     await loadCities();
   },
@@ -131,6 +151,26 @@ watch(
 );
 watch(
   city,
+  () => {
+    if (!restoring) {
+      capitalRegion.value = '';
+      resetSearch();
+    }
+  },
+  { flush: 'sync' },
+);
+watch(
+  cityGroup,
+  () => {
+    if (restoring) return;
+    if (!cityOptions.value.some((item) => String(item.id) === city.value)) city.value = '';
+    if (cityOptions.value.length === 1) city.value = String(cityOptions.value[0].id);
+    resetSearch();
+  },
+  { flush: 'sync' },
+);
+watch(
+  [capitalRegion, kind],
   () => {
     if (!restoring) resetSearch();
   },
@@ -141,7 +181,7 @@ watch([kind, term, neighborhood], () => {
 });
 
 async function search(): Promise<void> {
-  if (!city.value || !cities.value.some((item) => String(item.id) === city.value)) return;
+  if (!canSearch.value || !cityOptions.value.some((item) => String(item.id) === city.value)) return;
   searchController?.abort();
   const controller = new AbortController();
   searchController = controller;
@@ -150,9 +190,12 @@ async function search(): Promise<void> {
   result.value = null;
   page.value = 1;
   neighborhood.value = '';
-  searchedCity.value = `${cities.value.find((item) => String(item.id) === city.value)?.nome} · ${state.value}`;
+  searchedCity.value = `${cities.value.find((item) => String(item.id) === city.value)?.nome}${getCapitalRegion(capitalRegion.value) ? ` · ${getCapitalRegion(capitalRegion.value)?.label}` : ''} · ${state.value}`;
   try {
-    result.value = await getHealthUnits(city.value, controller.signal);
+    result.value = await getHealthUnits(city.value, controller.signal, {
+      region: capitalRegion.value || undefined,
+      type: kind.value as 'all' | 'UBS' | 'UPA',
+    });
   } catch (error) {
     if (!controller.signal.aborted)
       searchError.value = errorMessage(
@@ -164,10 +207,12 @@ async function search(): Promise<void> {
   }
 }
 async function submit(): Promise<void> {
-  if (!city.value) return;
+  if (!canSearch.value) return;
   const query = {
     uf: state.value,
     cidade: city.value,
+    ...(state.value === 'SP' && cityGroup.value !== 'all' ? { area: cityGroup.value } : {}),
+    ...(capitalRegion.value ? { regiao: capitalRegion.value } : {}),
     ...(kind.value !== 'all' ? { tipo: kind.value } : {}),
     ...(term.value.trim() ? { busca: term.value.trim() } : {}),
   };
@@ -182,11 +227,21 @@ async function restore(): Promise<void> {
   state.value = uf;
   await loadCities();
   const cityId = typeof route.query.cidade === 'string' ? route.query.cidade : '';
-  city.value = cities.value.some((item) => String(item.id) === cityId) ? cityId : '';
+  cityGroup.value =
+    state.value === 'SP' && cityGroups.some((item) => item.id === route.query.area)
+      ? String(route.query.area)
+      : 'all';
+  city.value = cityOptions.value.some((item) => String(item.id) === cityId) ? cityId : '';
+  capitalRegion.value =
+    city.value === capitalId && getCapitalRegion(String(route.query.regiao || ''))
+      ? String(route.query.regiao)
+      : '';
   kind.value = ['UBS', 'UPA'].includes(String(route.query.tipo)) ? String(route.query.tipo) : 'all';
   term.value = typeof route.query.busca === 'string' ? route.query.busca : '';
   restoring = false;
-  if (city.value) await search();
+  if (canSearch.value) await search();
+  else if (needsCapitalRegion.value)
+    searchHint.value = 'Selecione uma região da capital para fazer uma busca menor e mais rápida.';
 }
 watch(() => route.query, restore);
 onMounted(async () => {
@@ -206,7 +261,6 @@ async function retryLocations(): Promise<void> {
 }
 function clearFilters(): void {
   term.value = '';
-  kind.value = 'all';
   neighborhood.value = '';
 }
 </script>
@@ -250,16 +304,33 @@ function clearFilters(): void {
         <span class="section-icon"><Icon name="search" /></span>
         <div>
           <h2 id="search-title">Onde você procura atendimento?</h2>
-          <p>Selecione sua cidade para explorar as unidades mapeadas.</p>
+          <p>Selecione a cidade e refine a área para uma consulta mais rápida.</p>
         </div>
       </div>
-      <form class="search-form" @submit.prevent="submit">
+      <form
+        class="search-form"
+        :class="{ 'search-form-regional': state === 'SP' }"
+        @submit.prevent="submit"
+      >
         <div class="field state-field">
           <label for="state">Estado</label
           ><select id="state" v-model="state" :disabled="loadingStates || restoring" required>
             <option value="">{{ loadingStates ? 'Carregando…' : 'Selecione o estado' }}</option>
             <option v-for="item in states" :key="item.id" :value="item.sigla">
               {{ item.nome }} ({{ item.sigla }})
+            </option>
+          </select>
+        </div>
+        <div v-if="state === 'SP'" class="field area-field">
+          <label for="city-group">Área de busca</label>
+          <select
+            id="city-group"
+            v-model="cityGroup"
+            :disabled="loadingCities || restoring"
+            aria-describedby="area-help"
+          >
+            <option v-for="group in cityGroups" :key="group.id" :value="group.id">
+              {{ group.label }}
             </option>
           </select>
         </div>
@@ -274,8 +345,23 @@ function clearFilters(): void {
             <option value="">
               {{ loadingCities ? 'Carregando cidades…' : 'Selecione a cidade' }}
             </option>
-            <option v-for="item in cities" :key="item.id" :value="String(item.id)">
+            <option v-for="item in cityOptions" :key="item.id" :value="String(item.id)">
               {{ item.nome }}
+            </option>
+          </select>
+        </div>
+        <div v-if="needsCapitalRegion" class="field region-field">
+          <label for="capital-region">Região de São Paulo</label>
+          <select
+            id="capital-region"
+            v-model="capitalRegion"
+            required
+            :disabled="restoring"
+            aria-describedby="region-help"
+          >
+            <option value="">Selecione a região</option>
+            <option v-for="region in capitalRegions" :key="region.id" :value="region.id">
+              {{ region.label }}
             </option>
           </select>
         </div>
@@ -290,13 +376,22 @@ function clearFilters(): void {
         <button
           type="submit"
           class="primary-button search-submit"
-          :disabled="!city || searching || loadingCities || restoring"
+          :disabled="!canSearch || searching || loadingCities || restoring"
         >
           <span v-if="searching" class="spinner" /><Icon v-else name="search" :size="18" />{{
             searching ? 'Buscando…' : 'Buscar unidades'
           }}
         </button>
       </form>
+      <p v-if="state === 'SP'" id="area-help" class="area-help">
+        O Grande ABC reúne sete municípios. Escolha uma cidade por consulta; Suzano e Guarulhos
+        também têm buscas próprias.
+      </p>
+      <p v-if="needsCapitalRegion" id="region-help" class="area-help">
+        A busca será limitada à região escolhida. Os limites do GeoSampa são simplificados; locais
+        muito próximos das divisas podem variar.
+      </p>
+      <p v-if="searchHint" class="area-help" role="status">{{ searchHint }}</p>
       <div v-if="locationError" class="error-notice" role="alert">
         <p>{{ locationError }}</p>
         <button class="text-button" @click="retryLocations">
@@ -310,7 +405,10 @@ function clearFilters(): void {
     </section>
     <section v-if="searching" class="results-section" aria-live="polite" aria-busy="true">
       <h2>Buscando unidades em {{ searchedCity }}…</h2>
-      <p class="muted">A consulta ao mapa pode levar alguns segundos.</p>
+      <p class="muted">
+        Consultando a área selecionada. Se a fonte estiver indisponível, tentaremos outra instância
+        uma vez.
+      </p>
       <div class="unit-grid">
         <div v-for="index in 3" :key="index" class="skeleton-card"><span /><span /><span /></div>
       </div>
