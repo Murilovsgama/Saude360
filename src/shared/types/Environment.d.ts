@@ -1,0 +1,1 @@
+type Environment = string | null
