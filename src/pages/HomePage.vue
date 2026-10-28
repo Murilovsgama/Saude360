@@ -5,7 +5,7 @@ import Icon from '@/shared/components/Icon.vue';
 import UnitCard from '@/shared/components/UnitCard.vue';
 import UnitDetails from '@/shared/components/UnitDetails.vue';
 const UnitsMap = defineAsyncComponent(() => import('@/shared/components/UnitsMap.vue'));
-import { getStates, getCities } from '@/shared/services/locations';
+import publishedCities from '@/shared/data/publishedCities.json';
 import { hasPublishedUnits } from '@/shared/services/publishedUnits';
 import {
   getHealthUnits,
@@ -24,9 +24,9 @@ import type { State, City, HealthUnit, SearchResult } from '@/shared/types/healt
 
 const route = useRoute();
 const router = useRouter();
-const states = ref<State[]>([]);
-const cities = ref<City[]>([]);
-const state = ref('');
+const states = ref<State[]>([{ id: 35, sigla: 'SP', nome: 'São Paulo' }]);
+const cities = ref<City[]>(publishedCities.map(({ id, nome }) => ({ id: Number(id), nome })));
+const state = ref('SP');
 const city = ref('');
 const cityGroup = ref('all');
 const capitalRegion = ref('');
@@ -43,11 +43,9 @@ const term = ref('');
 const neighborhood = ref('');
 const result = ref<SearchResult | null>(null);
 const searchedCity = ref('');
-const loadingStates = ref(false);
 const loadingCities = ref(false);
 const searching = ref(false);
 const locationError = ref('');
-const locationFallback = ref(false);
 const selectedHasPublishedData = computed(() => hasPublishedUnits(city.value));
 const publicationDate = computed(() =>
   result.value?.publishedAt
@@ -124,49 +122,10 @@ function resetSearch(): void {
   progress.value = null;
 }
 async function loadStates(): Promise<void> {
-  loadingStates.value = true;
-  locationError.value = '';
-  statesController?.abort();
-  const controller = new AbortController();
-  statesController = controller;
-  try {
-    states.value = await getStates(controller.signal, () => {
-      locationFallback.value = true;
-    });
-  } catch (error) {
-    if (!controller.signal.aborted)
-      locationError.value = errorMessage(
-        error,
-        'Não foi possível carregar os estados do IBGE. Verifique a conexão e tente novamente.',
-      );
-  } finally {
-    if (!controller.signal.aborted) loadingStates.value = false;
-  }
+  // A cobertura inicial usa a lista publicada junto com o site.
 }
 async function loadCities(): Promise<void> {
-  locationController?.abort();
-  const controller = new AbortController();
-  locationController = controller;
-  cities.value = [];
-  locationError.value = '';
-  if (!state.value) {
-    loadingCities.value = false;
-    return;
-  }
-  loadingCities.value = true;
-  try {
-    cities.value = await getCities(state.value, controller.signal, () => {
-      locationFallback.value = true;
-    });
-  } catch (error) {
-    if (!controller.signal.aborted)
-      locationError.value = errorMessage(
-        error,
-        'Não foi possível carregar as cidades do IBGE. Tente novamente.',
-      );
-  } finally {
-    if (!controller.signal.aborted) loadingCities.value = false;
-  }
+  cities.value = publishedCities.map(({ id, nome }) => ({ id: Number(id), nome }));
 }
 watch(
   state,
@@ -270,7 +229,7 @@ async function submit(): Promise<void> {
 }
 async function restore(): Promise<void> {
   resetSearch();
-  const uf = typeof route.query.uf === 'string' ? route.query.uf : '';
+  const uf = typeof route.query.uf === 'string' ? route.query.uf : 'SP';
   if (!states.value.some((item) => item.sigla === uf)) return;
   restoring = true;
   state.value = uf;
@@ -371,15 +330,6 @@ function clearFilters(): void {
         :class="{ 'search-form-regional': state === 'SP' }"
         @submit.prevent="submit"
       >
-        <div class="field state-field">
-          <label for="state">Estado</label
-          ><select id="state" v-model="state" :disabled="loadingStates || restoring" required>
-            <option value="">{{ loadingStates ? 'Carregando…' : 'Selecione o estado' }}</option>
-            <option v-for="item in states" :key="item.id" :value="item.sigla">
-              {{ item.nome }} ({{ item.sigla }})
-            </option>
-          </select>
-        </div>
         <div v-if="state === 'SP'" class="field area-field">
           <label for="city-group">Área de busca</label>
           <select
@@ -457,16 +407,9 @@ function clearFilters(): void {
           Tentar novamente <Icon name="arrow" :size="16" />
         </button>
       </div>
-      <p v-if="locationFallback" class="area-help" role="status">
-        O IBGE não respondeu. Exibindo as cidades com dados publicados para você continuar a
-        consulta.
-      </p>
       <p class="search-footnote">
-        <Icon name="info" :size="14" />{{
-          selectedHasPublishedData
-            ? 'Esta cidade tem dados publicados de fonte oficial; a busca não depende da Overpass.'
-            : 'Dados publicados para a capital, Grande ABC, Guarulhos e Suzano. Outras cidades usam o mapa colaborativo.'
-        }}
+        <Icon name="info" :size="14" />
+        Cobertura inicial: capital paulista, Grande ABC, Guarulhos e Suzano.
       </p>
     </section>
     <section v-if="searching" class="results-section" aria-live="polite" aria-busy="true">
@@ -584,8 +527,8 @@ function clearFilters(): void {
         <Icon name="pin" :size="32" />
         <h3>Nenhuma unidade disponível nesta consulta</h3>
         <p>
-          Isso não significa que a cidade não tenha atendimento. A cobertura do mapa pode estar
-          incompleta ou o município ainda não ter uma área reconhecida na fonte.
+          Isso não significa que a cidade não tenha atendimento. O recorte publicado pode não
+          incluir todas as unidades da cidade.
         </p>
         <a
           class="secondary-button"
@@ -638,7 +581,7 @@ function clearFilters(): void {
           <span class="step-number">01</span>
           <div>
             <h3>Escolha sua cidade</h3>
-            <p>Comece pelo estado e município onde você procura atendimento.</p>
+            <p>Escolha um dos dez municípios com dados publicados no estado de São Paulo.</p>
           </div>
           <Icon name="pin" :size="23" />
         </article>

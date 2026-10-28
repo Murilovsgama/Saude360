@@ -88,12 +88,10 @@ function date(value: string): string {
       <div class="source-row">
         <span class="section-icon"><Icon name="map" /></span>
         <div>
-          <h3>OpenStreetMap · Demais cidades e mapa</h3>
+          <h3>OpenStreetMap · Mapa</h3>
           <p>
-            Fora da cobertura publicada, a busca depende da Overpass e do cadastro colaborativo do
-            OpenStreetMap. A identificação pelo nome não comprova vínculo com o SUS. A cobertura e a
-            disponibilidade variam; os locais explicitamente privados são excluídos. A camada visual
-            do mapa também usa OpenStreetMap.
+            A camada visual do mapa usa OpenStreetMap. Nesta versão, a busca está limitada à capital
+            paulista, aos sete municípios do Grande ABC, a Guarulhos e a Suzano.
           </p>
           <a
             href="https://www.openstreetmap.org/copyright"
@@ -109,8 +107,8 @@ function date(value: string): string {
         <div>
           <h3>IBGE · Localidades</h3>
           <p>
-            Fornece estados e municípios. Se a consulta ao IBGE falhar, exibimos as cidades com
-            dados publicados, com um aviso, para permitir continuar a busca.
+            Os municípios são identificados por códigos do IBGE. A lista das dez cidades cobertas
+            acompanha o site e não depende de consulta externa durante a navegação.
           </p>
           <a
             href="https://servicodados.ibge.gov.br/api/docs/localidades"

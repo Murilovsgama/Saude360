@@ -21,11 +21,11 @@ Esta versão inclui **776 registros reais com coordenadas**, coletados em 28/10/
 | Guarulhos             |        72 | CNES     |
 | Suzano                |        26 | CNES     |
 
-As contagens representam o recorte incluído no projeto, não o total oficial de unidades existentes. Na capital, os filtros por Centro, Zona Leste, Norte, Oeste e Sul são aplicados aos dados publicados. As demais cidades podem ser consultadas pelo OpenStreetMap/Overpass, dependendo da disponibilidade e cobertura desse serviço.
+As contagens representam o recorte incluído no projeto, não o total oficial de unidades existentes. Na capital, os filtros por Centro, Zona Leste, Norte, Oeste e Sul são aplicados aos dados publicados. A interface está limitada a esses dez municípios nesta versão.
 
 ## Funcionalidades
 
-- Busca por estado, município, região da capital e tipo de unidade.
+- Busca pelos dez municípios publicados, região da capital e tipo de unidade.
 - Atalhos para capital, Grande ABC, Guarulhos e Suzano.
 - Filtros por nome, rua e bairro; lista paginada e mapa interativo.
 - Endereço, telefone, turno/horário e responsável, quando disponíveis na fonte.
@@ -41,7 +41,7 @@ A aplicação continua **inteiramente front-end**, sem backend, banco de dados, 
 
 As APIs oficiais do CNES e GeoSampa responderam à coleta, mas não expuseram CORS para acesso direto do navegador. O script `scripts/update-health-data.py` coleta essas fontes fora do navegador, valida e publica arquivos JSON estáticos em `public/data/health-units/`. O site carrega somente o arquivo do município escolhido e filtra os resultados localmente. Não há proxy público intermediário.
 
-No navegador, a primeira consulta das cidades cobertas não depende de uma consulta anterior bem-sucedida nem de um servidor Overpass disponível. Se o IBGE falhar, a interface permite continuar com a lista das cidades publicadas, informando a redução da cobertura.
+No navegador, a primeira consulta das cidades cobertas não depende de uma consulta anterior bem-sucedida nem de um servidor Overpass disponível. A lista de cidades é publicada junto com o site e não depende do IBGE durante a navegação.
 
 ### Seleção e integridade
 
@@ -74,7 +74,7 @@ python scripts/update-sp-regions.py
 
 Resultados válidos são reutilizados por 15 minutos e retidos por até sete dias neste navegador, com limite de 20 consultas por cidade, região e tipo. Se a atualização falhar, uma consulta anterior com unidades pode ser exibida com aviso e a data original. Respostas com erro ou incompletas não sobrescrevem o cache. Um resultado vazio só é mostrado após uma consulta válida; uma falha não é interpretada como ausência de atendimento.
 
-Fora das cidades publicadas, a Overpass mantém no máximo três chamadas sequenciais com espera de 5 e 10 segundos para falhas temporárias. HTTP 429/406 usa no mínimo 30 e 60 segundos. `Retry-After` prevalece quando exposto; esperas acima de 60 segundos interrompem as tentativas automáticas. A espera pode ser cancelada e o intervalo também é respeitado em novas buscas manuais.
+O serviço de Overpass é mantido no código para uma possível expansão, mas não é acessível pela busca desta versão. Ele mantém no máximo três chamadas sequenciais com espera de 5 e 10 segundos para falhas temporárias. HTTP 429/406 usa no mínimo 30 e 60 segundos. `Retry-After` prevalece quando exposto; esperas acima de 60 segundos interrompem as tentativas automáticas. A espera pode ser cancelada e o intervalo também é respeitado em novas buscas manuais.
 
 O OpenStreetMap é colaborativo: classificação pelo nome não comprova vínculo com o SUS, registros explicitamente privados são excluídos e a cobertura pode estar incompleta. A disponibilidade dessas consultas continua dependente dos servidores públicos.
 
@@ -106,8 +106,8 @@ Os testes validam os arquivos reais publicados e o fluxo dessas cidades sem cham
 
 - [GeoSampa](https://geosampa.prefeitura.sp.gov.br/): unidades e limites da capital.
 - [API de Dados Abertos do Ministério da Saúde](https://apidadosabertos.saude.gov.br/): CNES dos demais municípios publicados.
-- [IBGE — Localidades](https://servicodados.ibge.gov.br/api/docs/localidades): estados e municípios.
-- [OpenStreetMap / Overpass](https://wiki.openstreetmap.org/wiki/Overpass_API): consultas fora da cobertura publicada e mapa. Dados © colaboradores do OpenStreetMap, sob [ODbL](https://www.openstreetmap.org/copyright).
+- [IBGE — Localidades](https://servicodados.ibge.gov.br/api/docs/localidades): identificação dos municípios.
+- [OpenStreetMap / Overpass](https://wiki.openstreetmap.org/wiki/Overpass_API): camada visual do mapa. Dados © colaboradores do OpenStreetMap, sob [ODbL](https://www.openstreetmap.org/copyright).
 - [Ministério da Saúde](https://www.gov.br/saude/): referências do guia UBS/UPA.
 
 O projeto é independente. Não realiza agendamentos nem informa filas, lotação, médicos disponíveis ou serviços em tempo real. Confirme o atendimento e o funcionamento com a unidade ou a Secretaria de Saúde.
