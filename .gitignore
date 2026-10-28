@@ -28,3 +28,7 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+# Relatórios locais
+playwright-report/
+test-results/
