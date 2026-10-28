@@ -1,7 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildQuery,
-  getHealthUnits,
   identifyType,
   mapElement,
   normalizeText,
@@ -9,7 +8,18 @@ import {
 import { getCities } from '../src/shared/services/locations';
 import { getJson } from '../src/shared/services/http';
 
-afterEach(() => vi.unstubAllGlobals());
+import { MemoryStorage } from './helpers/storage';
+let getHealthUnits: typeof import('../src/shared/services/healthUnits').getHealthUnits;
+beforeEach(async () => {
+  vi.useFakeTimers();
+  vi.resetModules();
+  vi.stubGlobal('localStorage', new MemoryStorage());
+  ({ getHealthUnits } = await import('../src/shared/services/healthUnits'));
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 describe('identificação e normalização de unidades', () => {
   it.each([
     ['UBS Centro', 'UBS'],
@@ -85,7 +95,8 @@ describe('consultas externas', () => {
     const first = await getHealthUnits('1100015');
     const second = await getHealthUnits('1100015');
     expect(first.units).toHaveLength(1);
-    expect(second).toBe(first);
+    expect(second.units).toEqual(first.units);
+    expect(second.source).toBe('cache');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
   it('rejeita respostas parciais com erro da Overpass', async () => {
@@ -99,7 +110,11 @@ describe('consultas externas', () => {
           ),
         ),
     );
-    await expect(getHealthUnits('1100023')).rejects.toThrow('não foi concluída');
+    const assertion = expect(getHealthUnits('1100023')).rejects.toThrow(
+      'temporariamente indisponível',
+    );
+    await vi.runAllTimersAsync();
+    await assertion;
   });
   it('trata o limite da API sem apresentar lista vazia como resultado', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 429 })));
@@ -114,17 +129,25 @@ describe('recortes e disponibilidade da busca', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response(JSON.stringify({ elements: [] })));
     vi.stubGlobal('fetch', fetchMock);
-    await getHealthUnits('3518800', undefined, { type: 'UPA' });
+    const pending = getHealthUnits('3518800', undefined, { type: 'UPA' });
+    await vi.runAllTimersAsync();
+    await pending;
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0][0]).toContain('private.coffee');
     expect(fetchMock.mock.calls[1][0]).toContain('overpass-api.de');
     expect(fetchMock.mock.calls[0][1].method).toBe('POST');
   });
-  it('não troca de servidor nem repete a busca após limite de requisições', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(new Response('', { status: 429 }));
+  it('limita a três tentativas com espera após limite de requisições', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(new Response('', { status: 429 })));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(getHealthUnits('3552502', undefined, { type: 'UPA' })).rejects.toThrow('limite');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const assertion = expect(getHealthUnits('3552502', undefined, { type: 'UPA' })).rejects.toThrow(
+      'temporariamente indisponível',
+    );
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
   it('não tenta outro servidor se a busca foi cancelada pelo usuário', async () => {
     const controller = new AbortController();

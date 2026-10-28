@@ -1,5 +1,13 @@
 import type { HealthUnit, OsmElement, SearchResult, UnitType } from '@/shared/types/health';
-import { getJson, HttpError } from './http';
+import { getJson } from './http';
+import {
+  CACHE_FRESH_MS,
+  readSearchCache,
+  saveSearchCache,
+  readCooldown,
+  setCooldown,
+} from './searchCache';
+import { MAX_ATTEMPTS, isRetryable, retryDelay, waitForRetry, type SearchProgress } from './retry';
 import { capitalId, getCapitalRegion, unitInRegion } from './regions';
 
 const endpoints = [
@@ -9,8 +17,17 @@ const endpoints = [
 export interface UnitSearch {
   region?: string;
   type?: 'all' | UnitType;
+  refresh?: boolean;
+  onProgress?: (progress: SearchProgress) => void;
 }
-const cache = new Map<string, { expires: number; result: SearchResult }>();
+export class SearchUnavailableError extends Error {
+  constructor(public retryAt: number) {
+    super(
+      'A fonte de dados está temporariamente indisponível ou sem capacidade. Não foi possível verificar as unidades desta região agora.',
+    );
+    this.name = 'SearchUnavailableError';
+  }
+}
 const namePattern =
   '(^|[^a-z])(UBS|UPA|USF|ESF)([^a-z]|$)|unidade b[aá]sica|unidade de pronto atendimento|unidade de sa[uú]de da fam[ií]lia|posto de sa[uú]de|cl[ií]nica da fam[ií]lia';
 
@@ -95,43 +112,77 @@ export async function getHealthUnits(
 ): Promise<SearchResult> {
   const query = buildQuery(cityId, options);
   const cacheKey = `${cityId}:${options.region || 'all'}:${options.type || 'all'}`;
-  const saved = cache.get(cacheKey);
-  if (saved && saved.expires > Date.now()) return saved.result;
+  signal?.throwIfAborted();
+  const saved = readSearchCache(cacheKey);
+  if (saved && !options.refresh && Date.now() - Date.parse(saved.consultedAt) < CACHE_FRESH_MS)
+    return { ...saved, source: 'cache', stale: false };
+  function unavailable(retryAt: number): SearchResult {
+    const error = new SearchUnavailableError(retryAt);
+    if (saved?.units.length)
+      return {
+        ...saved,
+        source: 'cache',
+        stale: true,
+        availabilityMessage: error.message,
+        retryAt,
+      };
+    throw error;
+  }
+  const cooldown = readCooldown();
+  if (cooldown > Date.now()) return unavailable(cooldown);
   let data: OverpassResponse | undefined;
-  for (let attempt = 0; attempt < endpoints.length; attempt++) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     signal?.throwIfAborted();
+    options.onProgress?.({ phase: 'request', attempt, maxAttempts: MAX_ATTEMPTS });
     try {
-      data = await getJson<OverpassResponse>(endpoints[attempt], signal, {
+      data = await getJson<OverpassResponse>(endpoints[(attempt - 1) % endpoints.length], signal, {
         method: 'POST',
         body: new URLSearchParams({ data: query }),
         timeoutMs: 22000,
       });
-      if (!Array.isArray(data.elements))
-        throw new Error('A fonte de dados retornou uma resposta inválida.');
+      signal?.throwIfAborted();
+      if (!data || !Array.isArray(data.elements))
+        throw new Error('Resposta inválida da fonte de dados.');
       if (data.remark) {
-        const error = new Error(
-          'A consulta não foi concluída pela fonte de dados. Selecione uma região menor e tente novamente.',
-        );
-        error.name = /timeout|timed out/i.test(data.remark) ? 'OverpassTimeout' : 'OverpassError';
+        const error = new Error('Consulta incompleta.');
+        error.name = /timeout|timed out|capacity|busy/i.test(data.remark)
+          ? 'OverpassTimeout'
+          : 'OverpassError';
         throw error;
       }
+      if (
+        !data.elements.every(
+          (element) =>
+            element &&
+            typeof element === 'object' &&
+            ['node', 'way', 'relation'].includes(element.type) &&
+            Number.isInteger(element.id) &&
+            (!element.tags ||
+              (typeof element.tags === 'object' &&
+                !Array.isArray(element.tags) &&
+                Object.values(element.tags).every((value) => typeof value === 'string'))),
+        )
+      )
+        throw new Error('Registros inválidos na resposta da fonte de dados.');
       break;
     } catch (error) {
       signal?.throwIfAborted();
-      const name = error instanceof Error ? error.name : '';
-      const retryable =
-        error instanceof TypeError ||
-        ['TimeoutError', 'OverpassTimeout'].includes(name) ||
-        (error instanceof HttpError && error.status >= 500);
-      if (attempt < endpoints.length - 1 && retryable) continue;
-      if (name === 'TimeoutError')
-        throw new Error(
-          'A consulta demorou mais que o esperado. Escolha uma região menor ou tente novamente em alguns instantes.',
-        );
-      throw error;
+      const delay = retryDelay(error, attempt);
+      const retryAt = Date.now() + delay;
+      setCooldown(retryAt);
+      // Limite global: três chamadas no total. Uma espera longa indicada pela API exige ação posterior.
+      if (!isRetryable(error) || attempt === MAX_ATTEMPTS || delay > 60000)
+        return unavailable(retryAt);
+      options.onProgress?.({
+        phase: 'waiting',
+        attempt: attempt + 1,
+        maxAttempts: MAX_ATTEMPTS,
+        retryAt,
+      });
+      await waitForRetry(delay, signal);
     }
   }
-  if (!data) throw new Error('A busca não foi concluída. Tente novamente.');
+  if (!data) return unavailable(Date.now() + 20000);
   const region = options.region ? getCapitalRegion(options.region) : undefined;
   const mapped = data.elements
     .map(mapElement)
@@ -155,12 +206,14 @@ export async function getHealthUnits(
           ),
     )
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-  const result = {
+  const result: SearchResult = {
+    source: 'network',
+    stale: false,
     units,
     consultedAt: new Date().toISOString(),
     mapUpdatedAt: data.osm3s?.timestamp_osm_base || '',
   };
-  cache.set(cacheKey, { expires: Date.now() + 5 * 60 * 1000, result });
+  saveSearchCache(cacheKey, result);
   return result;
 }
 export function routeUrl(unit: HealthUnit): string {

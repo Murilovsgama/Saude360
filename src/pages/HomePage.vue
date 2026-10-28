@@ -6,7 +6,11 @@ import UnitCard from '@/shared/components/UnitCard.vue';
 import UnitDetails from '@/shared/components/UnitDetails.vue';
 const UnitsMap = defineAsyncComponent(() => import('@/shared/components/UnitsMap.vue'));
 import { getStates, getCities } from '@/shared/services/locations';
-import { getHealthUnits, normalizeText } from '@/shared/services/healthUnits';
+import {
+  getHealthUnits,
+  normalizeText,
+  SearchUnavailableError,
+} from '@/shared/services/healthUnits';
 import {
   capitalId,
   capitalRegions,
@@ -14,6 +18,7 @@ import {
   citiesInGroup,
   getCapitalRegion,
 } from '@/shared/services/regions';
+import type { SearchProgress } from '@/shared/services/retry';
 import type { State, City, HealthUnit, SearchResult } from '@/shared/types/health';
 
 const route = useRoute();
@@ -42,6 +47,16 @@ const loadingCities = ref(false);
 const searching = ref(false);
 const locationError = ref('');
 const searchError = ref('');
+const progress = ref<SearchProgress | null>(null);
+const retryUntil = ref(0);
+const clockNow = ref(Date.now());
+let ticker: ReturnType<typeof setInterval> | undefined;
+const retrySeconds = computed(() =>
+  Math.max(0, Math.ceil((retryUntil.value - clockNow.value) / 1000)),
+);
+const waitingSeconds = computed(() =>
+  Math.max(0, Math.ceil(((progress.value?.retryAt || 0) - clockNow.value) / 1000)),
+);
 const view = ref<'list' | 'map'>('list');
 const selectedUnit = ref<HealthUnit | null>(null);
 const page = ref(1);
@@ -95,6 +110,7 @@ function resetSearch(): void {
   neighborhood.value = '';
   selectedUnit.value = null;
   searchHint.value = '';
+  progress.value = null;
 }
 async function loadStates(): Promise<void> {
   loadingStates.value = true;
@@ -180,30 +196,48 @@ watch([kind, term, neighborhood], () => {
   page.value = 1;
 });
 
-async function search(): Promise<void> {
+async function search(refresh = false): Promise<void> {
   if (!canSearch.value || !cityOptions.value.some((item) => String(item.id) === city.value)) return;
   searchController?.abort();
   const controller = new AbortController();
   searchController = controller;
   searching.value = true;
+  progress.value = null;
   searchError.value = '';
   result.value = null;
   page.value = 1;
   neighborhood.value = '';
   searchedCity.value = `${cities.value.find((item) => String(item.id) === city.value)?.nome}${getCapitalRegion(capitalRegion.value) ? ` · ${getCapitalRegion(capitalRegion.value)?.label}` : ''} · ${state.value}`;
   try {
-    result.value = await getHealthUnits(city.value, controller.signal, {
+    const response = await getHealthUnits(city.value, controller.signal, {
       region: capitalRegion.value || undefined,
       type: kind.value as 'all' | 'UBS' | 'UPA',
+      refresh,
+      onProgress: (update) => {
+        if (!controller.signal.aborted) {
+          progress.value = update;
+          clockNow.value = Date.now();
+        }
+      },
     });
+    if (controller.signal.aborted) return;
+    result.value = response;
+    retryUntil.value = response.retryAt || 0;
+    clockNow.value = Date.now();
   } catch (error) {
-    if (!controller.signal.aborted)
+    if (!controller.signal.aborted) {
+      retryUntil.value = error instanceof SearchUnavailableError ? error.retryAt : 0;
+      clockNow.value = Date.now();
       searchError.value = errorMessage(
         error,
-        'Não foi possível consultar o mapa agora. O serviço pode estar indisponível ou a conexão foi interrompida. Tente novamente.',
+        'A fonte de dados está temporariamente indisponível. Não foi possível verificar as unidades agora.',
       );
+    }
   } finally {
-    if (!controller.signal.aborted) searching.value = false;
+    if (!controller.signal.aborted) {
+      searching.value = false;
+      progress.value = null;
+    }
   }
 }
 async function submit(): Promise<void> {
@@ -245,10 +279,14 @@ async function restore(): Promise<void> {
 }
 watch(() => route.query, restore);
 onMounted(async () => {
+  ticker = setInterval(() => {
+    clockNow.value = Date.now();
+  }, 1000);
   await loadStates();
   await restore();
 });
 onBeforeUnmount(() => {
+  clearInterval(ticker);
   locationController?.abort();
   searchController?.abort();
   statesController?.abort();
@@ -258,6 +296,12 @@ async function retryLocations(): Promise<void> {
     await loadStates();
     await restore();
   } else await loadCities();
+}
+function cancelSearch(): void {
+  searchController?.abort();
+  searching.value = false;
+  progress.value = null;
+  searchHint.value = 'Busca cancelada. Nenhuma nova tentativa será enviada por esta busca.';
 }
 function clearFilters(): void {
   term.value = '';
@@ -405,19 +449,31 @@ function clearFilters(): void {
     </section>
     <section v-if="searching" class="results-section" aria-live="polite" aria-busy="true">
       <h2>Buscando unidades em {{ searchedCity }}…</h2>
-      <p class="muted">
-        Consultando a área selecionada. Se a fonte estiver indisponível, tentaremos outra instância
-        uma vez.
+      <p v-if="progress?.phase === 'waiting'" class="muted" role="status">
+        A fonte está ocupada ou não respondeu. Nova tentativa em {{ waitingSeconds }}s ({{
+          progress.attempt
+        }}
+        de {{ progress.maxAttempts }}).
       </p>
+      <p v-else class="muted">
+        Consultando a área selecionada. Tentativa {{ progress?.attempt || 1 }} de
+        {{ progress?.maxAttempts || 3 }}.
+      </p>
+      <button class="secondary-button cancel-search" @click="cancelSearch">Cancelar busca</button>
       <div class="unit-grid">
         <div v-for="index in 3" :key="index" class="skeleton-card"><span /><span /><span /></div>
       </div>
     </section>
     <section v-else-if="searchError" class="empty-state" role="alert">
       <Icon name="info" :size="32" />
-      <h2>A busca não foi concluída</h2>
+      <h2>Fonte de dados temporariamente indisponível</h2>
       <p>{{ searchError }}</p>
-      <button class="secondary-button" @click="search">Tentar novamente</button
+      <p class="muted">
+        Esta falha não significa que não existam unidades na região. Não há resultados salvos
+        disponíveis para esta busca.
+      </p>
+      <button class="secondary-button" :disabled="retrySeconds > 0" @click="search(true)">
+        {{ retrySeconds > 0 ? `Tentar novamente em ${retrySeconds}s` : 'Tentar novamente' }}</button
       ><a
         href="https://cnes.datasus.gov.br/"
         target="_blank"
@@ -427,6 +483,31 @@ function clearFilters(): void {
       /></a>
     </section>
     <section v-else-if="result" class="results-section" aria-labelledby="results-title">
+      <div
+        v-if="result.source === 'cache'"
+        class="cache-notice"
+        :class="{ 'cache-notice-stale': result.stale }"
+        :role="result.stale ? 'alert' : 'status'"
+      >
+        <div>
+          <strong>{{
+            result.stale
+              ? 'Fonte indisponível: exibindo a última consulta salva'
+              : 'Exibindo uma consulta salva neste navegador'
+          }}</strong>
+          <p>
+            Consulta realizada em {{ consultationDate }}.
+            {{
+              result.stale
+                ? 'Não foi possível atualizar os dados agora; as informações podem ter mudado.'
+                : 'Os resultados foram reutilizados para evitar uma nova chamada à API.'
+            }}
+          </p>
+        </div>
+        <button class="secondary-button" :disabled="retrySeconds > 0" @click="search(true)">
+          {{ retrySeconds > 0 ? `Atualizar em ${retrySeconds}s` : 'Atualizar dados' }}
+        </button>
+      </div>
       <div class="results-heading">
         <div>
           <span class="eyebrow">EXPLORE SUA CIDADE</span>

@@ -48,7 +48,17 @@ Não há dados fictícios de unidades como alternativa às APIs. Uma resposta va
 
 O endpoint CNES avaliado não retornou o cabeçalho CORS necessário para uma integração direta no navegador. Ele não é consumido por um proxy externo. Por isso, esta versão utiliza OpenStreetMap e apresenta o CNES apenas como referência oficial externa.
 
-As consultas de unidades são reutilizadas por até cinco minutos em memória por município, região e tipo. São enviadas por POST à instância Private.coffee da Overpass; em caso de falha de rede, timeout ou erro de servidor, há uma única tentativa sequencial na instância overpass-api.de. Cancelamento pelo usuário e limite de requisições não causam nova tentativa automática. Nenhuma localização ou informação de pacientes é armazenada. Os provedores externos recebem as requisições normais do navegador.
+### Indisponibilidade, tentativas e cache
+
+Cada busca pode realizar no máximo três chamadas sequenciais à Overpass, alternando as duas instâncias públicas. Falhas de rede, timeout e respostas de sobrecarga usam esperas de 5 e 10 segundos antes das novas tentativas. Para HTTP 429/406, o mínimo é de 30 e 60 segundos. O cabeçalho `Retry-After`, quando exposto pelo servidor, prevalece se indicar um prazo maior. Esperas acima de 60 segundos interrompem as tentativas automáticas e informam quando será possível tentar novamente.
+
+A tela informa a tentativa e a contagem regressiva e permite cancelar a busca, incluindo a espera. Após falhas, um intervalo mínimo também bloqueia novas chamadas feitas manualmente. Esse intervalo vale para as buscas da aplicação e é preservado ao recarregar a página quando o navegador permite armazenamento local.
+
+Respostas completas e válidas são salvas no navegador, separadas por município, região e tipo. O cache é reutilizado por 15 minutos e retido por até sete dias, limitado às 20 últimas consultas. A interface identifica os dados salvos e mostra a data original da consulta. O botão de atualização permite consultar a fonte novamente, respeitando o intervalo de espera.
+
+Quando a fonte falha, uma consulta anterior com unidades pode ser exibida com aviso de indisponibilidade e dados possivelmente desatualizados. Sem dados anteriores utilizáveis, é apresentada uma mensagem de indisponibilidade, nunca uma lista vazia atribuída à falha. Respostas com erro ou incompletas não substituem o cache. Um resultado vazio só representa ausência de registros na consulta quando foi recebido com sucesso; resultados vazios antigos não são usados como alternativa durante falhas.
+
+O cache contém filtros e informações públicas das unidades, sem dados de pacientes ou geolocalização do visitante. Se o armazenamento for bloqueado ou ficar sem espaço, a consulta continua funcionando com cache em memória. Os provedores externos recebem as requisições normais do navegador.
 
 ### Limites regionais de São Paulo
 

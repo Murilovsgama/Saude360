@@ -79,13 +79,24 @@ import Icon from '@/shared/components/Icon.vue';
       <section class="reading-card">
         <h2>Atualização e privacidade</h2>
         <p>
-          A consulta é feita ao abrir uma busca. O resultado pode ser reutilizado por até cinco
-          minutos na memória da página, por cidade, região e tipo. A data da consulta não significa
-          que o cadastro da unidade foi atualizado naquela data.
+          Consultas válidas podem ser reutilizadas por 15 minutos e ficam salvas neste navegador por
+          até sete dias, com limite de 20 consultas. A tela identifica quando os dados são salvos e
+          mostra a data original da consulta, que é diferente da última edição do cadastro.
         </p>
         <p>
-          Não há cadastro, dados de pacientes, rastreadores ou armazenamento de localização. As APIs
-          e o mapa recebem as requisições do navegador. Links de rota abrem um serviço externo.
+          Se a fonte estiver indisponível, podemos exibir uma consulta anterior com unidades, com
+          aviso de que os dados podem ter mudado. Sem dados salvos utilizáveis, informamos a
+          indisponibilidade; uma falha não é apresentada como ausência de atendimento.
+        </p>
+        <p>
+          As tentativas são limitadas e têm espera progressiva, com opção de cancelamento. O
+          intervalo indicado pela API é respeitado quando está disponível.
+        </p>
+        <p>
+          Não há cadastro, dados de pacientes, rastreadores ou solicitação de geolocalização. O
+          cache armazena os filtros da consulta e informações públicas das unidades no seu
+          navegador. As APIs e o mapa recebem as requisições normais do navegador; links de rota
+          abrem um serviço externo.
         </p>
       </section>
     </div>

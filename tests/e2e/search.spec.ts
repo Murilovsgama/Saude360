@@ -91,15 +91,19 @@ test('explica ausência de dados sem afirmar ausência de atendimento', async ({
   await expect(page.getByText(/Isso não significa que a cidade/)).toBeVisible();
 });
 test('trata indisponibilidade e permite repetir a consulta', async ({ page }) => {
+  await page.clock.install();
   await mockLocations(page);
   let requests = 0;
   await page.route('https://overpass.private.coffee/api/interpreter**', (route) => {
     requests++;
-    return route.fulfill(requests === 1 ? { status: 429, body: '' } : { json: { elements: [] } });
+    return route.fulfill(requests === 1 ? { status: 400, body: '' } : { json: { elements: [] } });
   });
   await page.goto('/');
   await chooseCity(page);
-  await expect(page.getByRole('heading', { name: 'A busca não foi concluída' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Fonte de dados temporariamente indisponível' }),
+  ).toBeVisible();
+  await page.clock.fastForward(5000);
   await page.getByRole('button', { name: 'Tentar novamente', exact: true }).click();
   await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
 });
@@ -222,4 +226,119 @@ test('não dispara consulta da capital inteira ao abrir link antigo sem região'
   await page.goto('/#/?uf=SP&cidade=3550308');
   await expect(page.getByRole('status')).toContainText('Selecione uma região');
   expect(requests).toBe(0);
+});
+
+const overpassRequests =
+  /^https:\/\/(overpass\.private\.coffee|overpass-api\.de)\/api\/interpreter/;
+
+test('informa a espera progressiva, encerra após três falhas e não exibe ausência de unidades', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await mockLocations(page);
+  let requests = 0;
+  await page.route(overpassRequests, (route) => {
+    requests++;
+    return route.fulfill({ status: 502, body: 'server at capacity' });
+  });
+  await page.goto('/');
+  await chooseCity(page);
+  await expect(page.getByRole('status')).toContainText('Nova tentativa em 5s (2 de 3)');
+  expect(requests).toBe(1);
+  await page.clock.fastForward(5000);
+  await expect(page.getByRole('status')).toContainText('Nova tentativa em 10s (3 de 3)');
+  expect(requests).toBe(2);
+  await page.clock.fastForward(10000);
+  await expect(
+    page.getByRole('heading', { name: 'Fonte de dados temporariamente indisponível' }),
+  ).toBeVisible();
+  expect(requests).toBe(3);
+  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Tentar novamente em 20s' })).toBeDisabled();
+});
+
+test('cancela a espera e não envia a próxima tentativa', async ({ page }) => {
+  await page.clock.install();
+  await mockLocations(page);
+  let requests = 0;
+  await page.route(overpassRequests, (route) => {
+    requests++;
+    return route.fulfill({ status: 502 });
+  });
+  await page.goto('/');
+  await chooseCity(page);
+  await expect(page.getByRole('status')).toContainText('Nova tentativa em');
+  await page.getByRole('button', { name: 'Cancelar busca', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Busca cancelada');
+  await page.clock.fastForward(60000);
+  expect(requests).toBe(1);
+});
+
+test('reutiliza dados salvos após recarregar e mostra a data original', async ({ page }) => {
+  await mockLocations(page);
+  let requests = 0;
+  await page.route(overpassRequests, (route) => {
+    requests++;
+    return route.fulfill({
+      json: {
+        elements: [{ type: 'node', id: 1, lat: -23.55, lon: -46.633, tags: { name: 'UBS Salva' } }],
+      },
+    });
+  });
+  await page.goto('/');
+  await chooseCity(page);
+  await expect(page.getByRole('heading', { name: 'UBS Salva', exact: true })).toBeVisible();
+  const timestamp = await page.locator('.data-timestamp').textContent();
+  await page.reload();
+  await expect(page.getByRole('status')).toContainText(
+    'Exibindo uma consulta salva neste navegador',
+  );
+  await expect(page.locator('.data-timestamp')).toHaveText(timestamp!);
+  expect(requests).toBe(1);
+});
+
+test('mantém a última consulta com aviso quando a atualização falha', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-28T12:00:00Z') });
+  await mockLocations(page);
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'saude360:units:v1:3550308:centro:all',
+      JSON.stringify({
+        consultedAt: '2026-10-28T10:00:00Z',
+        mapUpdatedAt: '',
+        units: [
+          {
+            id: 'node/1',
+            name: 'UBS Consulta Anterior',
+            type: 'UBS',
+            latitude: -23.55,
+            longitude: -46.633,
+            street: '',
+            neighborhood: '',
+            phone: '',
+            hours: '',
+            operator: '',
+            cnes: '',
+            editedAt: '',
+            sourceUrl: 'https://www.openstreetmap.org/node/1',
+          },
+        ],
+      }),
+    );
+  });
+  await page.route(overpassRequests, (route) => route.fulfill({ status: 502 }));
+  await page.goto('/');
+  await chooseCity(page);
+  await expect(page.getByRole('status')).toContainText('Nova tentativa em 5s');
+  await page.clock.fastForward(5000);
+  await expect(page.getByRole('status')).toContainText('Nova tentativa em 10s');
+  await page.clock.fastForward(10000);
+  await expect(page.getByRole('alert')).toContainText(
+    'Fonte indisponível: exibindo a última consulta salva',
+  );
+  await expect(page.getByRole('alert')).toContainText('28/10/2026');
+  await expect(
+    page.getByRole('heading', { name: 'UBS Consulta Anterior', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toHaveCount(0);
 });

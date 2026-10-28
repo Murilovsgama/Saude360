@@ -27,6 +27,10 @@ export interface SearchResult {
   units: HealthUnit[];
   consultedAt: string;
   mapUpdatedAt: string;
+  source: 'network' | 'cache';
+  stale: boolean;
+  availabilityMessage?: string;
+  retryAt?: number;
 }
 export interface OsmElement {
   type: 'node' | 'way' | 'relation';
