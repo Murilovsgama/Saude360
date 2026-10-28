@@ -28,3 +28,11 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+# Relatórios locais
+playwright-report/
+test-results/
+
+# Coleta e testes em Python
+__pycache__/
+*.py[cod]
