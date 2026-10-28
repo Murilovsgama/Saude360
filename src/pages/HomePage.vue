@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Icon from '@/shared/components/Icon.vue';
+import ServiceGuide from '@/shared/components/ServiceGuide.vue';
 import UnitCard from '@/shared/components/UnitCard.vue';
 import UnitDetails from '@/shared/components/UnitDetails.vue';
 const UnitsMap = defineAsyncComponent(() => import('@/shared/components/UnitsMap.vue'));
@@ -380,6 +381,7 @@ function clearFilters(): void {
         </div>
       </div>
     </section>
+    <ServiceGuide />
     <section id="unit-search" class="search-panel" aria-labelledby="search-title">
       <div class="section-title">
         <span class="section-icon"><Icon name="search" /></span>

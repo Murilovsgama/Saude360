@@ -33,6 +33,12 @@ function phoneHref(phone: string): string {
             : 'identificada pelo nome no mapa'
         }}</span
       >
+      <p>
+        <RouterLink to="/guia" @click="$emit('close')"
+          >Entenda para que serve uma {{ unit.type }} e os serviços geralmente
+          oferecidos</RouterLink
+        >
+      </p>
       <dl>
         <div>
           <dt>Endereço</dt>
