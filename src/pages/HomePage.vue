@@ -59,19 +59,19 @@ async function useLocation(): Promise<void> {
     position.value = { latitude: current.coords.latitude, longitude: current.coords.longitude };
     nearby.value = true;
     searching.value = true;
-    searchedCity.value = 'até 30 km da sua localização · cobertura publicada';
+    searchedCity.value = 'até 5 km da sua localização · cobertura publicada';
     const responses = await Promise.all(publishedCities.map(({ id }) => getHealthUnits(id)));
     if (request !== locationRequest) return;
     const units = responses
       .flatMap((item) => item.units)
-      .filter((unit) => distance(unit) <= 30)
+      .filter((unit) => distance(unit) <= 5)
       .sort((a, b) => distance(a) - distance(b));
     const oldest = responses.reduce((a, b) =>
       (a.publishedAt || '') < (b.publishedAt || '') ? a : b,
     );
     result.value = { ...oldest, units };
     locationNotice.value =
-      'Distâncias em linha reta. Apenas unidades dos dez municípios cobertos, até 30 km. A unidade mais próxima pode não ser a referência do seu endereço.';
+      'Distâncias em linha reta. Apenas unidades dos dez municípios cobertos, até 5 km. A unidade mais próxima pode não ser a referência do seu endereço.';
   } catch {
     locationNotice.value =
       'Não foi possível usar a localização ou carregar as unidades. Verifique a permissão e a conexão, ou escolha a região manualmente.';

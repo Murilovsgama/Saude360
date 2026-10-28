@@ -123,4 +123,4 @@ Publique toda a pasta `dist`, incluindo `data/`. A base relativa e as rotas em h
 
 ### Localização opcional
 
-O botão Usar minha localização solicita permissão somente ao ser acionado (requer HTTPS ou localhost). Coordenadas ficam em memória e não são incluídas no cache. São consultados os dez arquivos publicados e exibidas unidades até 30 km, com distância em linha reta. Isso não determina a cidade do usuário nem garante cobertura fora dos municípios publicados. Google Maps e Waze recebem somente as coordenadas do destino nos links de rota.
+O botão Usar minha localização solicita permissão somente ao ser acionado (requer HTTPS ou localhost). Coordenadas ficam em memória e não são incluídas no cache. São consultados os dez arquivos publicados e exibidas unidades até 5 km, com distância em linha reta. Isso não determina a cidade do usuário nem garante cobertura fora dos municípios publicados. Google Maps e Waze recebem somente as coordenadas do destino nos links de rota.
