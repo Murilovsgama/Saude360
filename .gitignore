@@ -36,3 +36,9 @@ test-results/
 # Coleta e testes em Python
 __pycache__/
 *.py[cod]
+
+# Configuração local de hospedagem e credenciais
+.vercel/
+.env
+.env.*
+!.env.example

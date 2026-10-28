@@ -119,8 +119,24 @@ npm run build
 npm run preview
 ```
 
-Publique toda a pasta `dist`, incluindo `data/`. A base relativa e as rotas em hash permitem hospedagem estática em subdiretórios. Os recortes publicados não precisam de um servidor de aplicação; os mapas e consultas fora da cobertura seguem as políticas dos respectivos provedores.
+Publique toda a pasta `dist`, incluindo `data/`. A base relativa e as rotas em hash permitem hospedagem estática em subdiretórios. Os recortes publicados não precisam de um servidor de aplicação; os mapas seguem as políticas dos respectivos provedores.
 
 ### Localização opcional
 
 O botão Usar minha localização solicita permissão somente ao ser acionado (requer HTTPS ou localhost). Coordenadas ficam em memória e não são incluídas no cache. São consultados os dez arquivos publicados e exibidas unidades até 5 km, com distância em linha reta. Isso não determina a cidade do usuário nem garante cobertura fora dos municípios publicados. Google Maps e Waze recebem somente as coordenadas do destino nos links de rota.
+
+
+### Publicar na Vercel
+
+1. Acesse o painel da Vercel e escolha **Add New → Project**.
+2. Importe o repositório **Murilovsgama/Saude360**.
+3. Use a branch de produção **main** e mantenha o diretório raiz na raiz do repositório.
+4. Confirme o preset **Vite**, instalação **npm ci**, build **npm run build** e saída **dist**.
+5. Não são necessárias variáveis de ambiente ou chaves de API.
+6. Clique em **Deploy** e confira a busca manual, mapa e links de rota no endereço HTTPS publicado.
+
+O arquivo `vercel.json` registra as configurações de build. As rotas usam hash e dispensam regras de rewrite. Novos commits na branch de produção podem gerar novas publicações pela integração com GitHub.
+
+A geolocalização exige HTTPS (ou localhost) e permissão do navegador. Os dados JSON em `dist/data/` devem acompanhar a publicação. Para atualizar os registros, execute a coleta, revise os arquivos gerados e publique um novo commit.
+
+Também é possível hospedar a pasta `dist` em outro provedor de sites estáticos com HTTPS.
