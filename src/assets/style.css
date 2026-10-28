@@ -1582,3 +1582,29 @@ em {
     align-items: stretch;
   }
 }
+
+.coverage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin: 20px 0;
+}
+.coverage-table caption {
+  text-align: left;
+  color: #687f99;
+  font-size: 11px;
+  padding-bottom: 12px;
+}
+.coverage-table th,
+.coverage-table td {
+  padding: 10px 8px;
+  text-align: left;
+  border-bottom: 1px solid #e3e9f1;
+}
+.coverage-table thead {
+  color: #496884;
+  background: #f5f8fc;
+}
+.coverage-table tbody th {
+  font-weight: 500;
+}

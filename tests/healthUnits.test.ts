@@ -13,6 +13,7 @@ let getHealthUnits: typeof import('../src/shared/services/healthUnits').getHealt
 beforeEach(async () => {
   vi.useFakeTimers();
   vi.resetModules();
+  vi.doMock('../src/shared/services/publishedUnits', () => ({ hasPublishedUnits: () => false }));
   vi.stubGlobal('localStorage', new MemoryStorage());
   ({ getHealthUnits } = await import('../src/shared/services/healthUnits'));
 });

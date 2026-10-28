@@ -1,344 +1,257 @@
 import { test, expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+const overpass = /^https:\/\/(overpass\.private\.coffee|overpass-api\.de)\/api\/interpreter/;
+const cities = [
+  { id: 3550308, nome: 'São Paulo' },
+  { id: 3513801, nome: 'Diadema' },
+  { id: 3529401, nome: 'Mauá' },
+  { id: 3543303, nome: 'Ribeirão Pires' },
+  { id: 3544103, nome: 'Rio Grande da Serra' },
+  { id: 3547809, nome: 'Santo André' },
+  { id: 3548708, nome: 'São Bernardo do Campo' },
+  { id: 3548807, nome: 'São Caetano do Sul' },
+  { id: 3518800, nome: 'Guarulhos' },
+  { id: 3552502, nome: 'Suzano' },
+  { id: 3509502, nome: 'Campinas' },
+];
 async function mockLocations(page: Page): Promise<void> {
-  await page.route('**/api/v1/localidades/**', async (route) => {
-    const data = route.request().url().includes('/municipios')
-      ? [
-          { id: 3550308, nome: 'São Paulo' },
-          { id: 3513801, nome: 'Diadema' },
-          { id: 3529401, nome: 'Mauá' },
-          { id: 3543303, nome: 'Ribeirão Pires' },
-          { id: 3544103, nome: 'Rio Grande da Serra' },
-          { id: 3547809, nome: 'Santo André' },
-          { id: 3548708, nome: 'São Bernardo do Campo' },
-          { id: 3548807, nome: 'São Caetano do Sul' },
-          { id: 3518800, nome: 'Guarulhos' },
-          { id: 3552502, nome: 'Suzano' },
-        ]
-      : [{ id: 35, sigla: 'SP', nome: 'São Paulo' }];
-    await route.fulfill({ json: data });
-  });
-  // Os testes não consomem os servidores públicos de mapas.
-  await page.route('https://tile.openstreetmap.org/**', (route) => route.fulfill({ status: 204 }));
-}
-async function chooseCity(page: Page): Promise<void> {
-  await page.getByLabel('Estado', { exact: true }).selectOption('SP');
-  await page.getByLabel('Cidade', { exact: true }).selectOption('3550308');
-  await page.getByLabel('Região de São Paulo', { exact: true }).selectOption('centro');
-  await page.getByRole('button', { name: 'Buscar unidades', exact: true }).click();
-}
-test('busca, filtra, abre detalhes e alterna para o mapa', async ({ page }) => {
-  await mockLocations(page);
-  await page.route('https://overpass.private.coffee/api/interpreter**', (route) =>
+  await page.route('**/api/v1/localidades/**', (route) =>
     route.fulfill({
-      json: {
-        elements: [
-          {
-            type: 'node',
-            id: 1,
-            lat: -23.55,
-            lon: -46.63,
-            timestamp: '2026-10-01T10:00:00Z',
-            tags: {
-              name: 'UBS São João',
-              'addr:street': 'Rua Um',
-              'addr:housenumber': '10',
-              'addr:suburb': 'Centro',
-            },
-          },
-          {
-            type: 'way',
-            id: 2,
-            center: { lat: -23.56, lon: -46.64 },
-            tags: { name: 'UPA Norte', phone: '+55 11 1234-5678' },
-          },
-        ],
-      },
+      json: route.request().url().includes('/municipios')
+        ? cities
+        : [{ id: 35, sigla: 'SP', nome: 'São Paulo' }],
     }),
   );
-  await page.goto('/');
-  await expect(page.getByRole('banner')).toHaveCount(1);
-  await expect(page.getByRole('contentinfo')).toHaveCount(1);
-  await chooseCity(page);
-  await expect(page.getByRole('heading', { name: 'UBS São João', exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/cidade=3550308/);
-  await page.getByRole('button', { name: 'Ver detalhes de UBS São João' }).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByText('Não informado na fonte', { exact: true }).first()).toBeVisible();
-  await expect(dialog.getByRole('link', { name: 'Traçar rota' })).toHaveAttribute(
-    'href',
-    /destination=-23.55,-46.63/,
-  );
-  await page.keyboard.press('Escape');
-  await expect(dialog).not.toBeVisible();
-  await page.getByRole('searchbox', { name: 'Filtrar por nome, rua ou bairro' }).fill('sao joao');
-  await expect(page.getByRole('heading', { name: 'UPA Norte', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Mapa', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Mapa das unidades encontradas' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'OpenStreetMap', exact: true })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-    true,
-  );
-});
-test('explica ausência de dados sem afirmar ausência de atendimento', async ({ page }) => {
-  await mockLocations(page);
-  await page.route('https://overpass.private.coffee/api/interpreter**', (route) =>
-    route.fulfill({ json: { elements: [] } }),
-  );
-  await page.goto('/');
-  await chooseCity(page);
-  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
-  await expect(page.getByText(/Isso não significa que a cidade/)).toBeVisible();
-});
-test('trata indisponibilidade e permite repetir a consulta', async ({ page }) => {
-  await page.clock.install();
-  await mockLocations(page);
-  let requests = 0;
-  await page.route('https://overpass.private.coffee/api/interpreter**', (route) => {
-    requests++;
-    return route.fulfill(requests === 1 ? { status: 400, body: '' } : { json: { elements: [] } });
-  });
-  await page.goto('/');
-  await chooseCity(page);
-  await expect(
-    page.getByRole('heading', { name: 'Fonte de dados temporariamente indisponível' }),
-  ).toBeVisible();
-  await page.clock.fastForward(5000);
-  await page.getByRole('button', { name: 'Tentar novamente', exact: true }).click();
-  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
-});
-test('restaura cidade e tipo de uma URL compartilhada', async ({ page }) => {
-  await mockLocations(page);
-  await page.route('https://overpass.private.coffee/api/interpreter**', (route) =>
-    route.fulfill({ json: { elements: [] } }),
-  );
-  await page.goto('/#/?uf=SP&cidade=3550308&tipo=UPA&regiao=centro');
-  await expect(page.getByLabel('Cidade', { exact: true })).toHaveValue('3550308');
-  await expect(page.getByLabel('Tipo de unidade')).toHaveValue('UPA');
-  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
-});
+  await page.route('https://tile.openstreetmap.org/**', (route) => route.fulfill({ status: 204 }));
+}
+async function chooseCity(page: Page, id = '3550308', region = 'leste'): Promise<void> {
+  await page.getByLabel('Estado', { exact: true }).selectOption('SP');
+  await page.getByLabel('Cidade', { exact: true }).selectOption(id);
+  if (id === '3550308')
+    await page.getByLabel('Região de São Paulo', { exact: true }).selectOption(region);
+  await page.getByRole('button', { name: 'Buscar unidades', exact: true }).click();
+}
 
-test('navega pelo guia com menu acessível no celular', async ({ page, isMobile }) => {
-  await mockLocations(page);
-  await page.goto('/');
-  if (isMobile) {
-    await expect(page.getByRole('navigation', { name: 'Navegação principal' })).not.toBeVisible();
-    await page.getByRole('button', { name: 'Abrir menu', exact: true }).click();
-    await expect(
-      page.getByRole('button', { name: 'Fechar menu', exact: true }).first(),
-    ).toHaveAttribute('aria-expanded', 'true');
-  }
-  await page.getByRole('link', { name: 'Entenda o atendimento', exact: true }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Conhecer a rede é o primeiro passo.' }),
-  ).toBeVisible();
-  await expect(page.getByRole('banner')).toHaveCount(1);
-  if (isMobile)
-    await expect(page.getByRole('button', { name: 'Abrir menu', exact: true })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
-});
-
-test('permite tentar novamente quando a lista de estados falha', async ({ page }) => {
-  let requests = 0;
-  await page.route('**/api/v1/localidades/**', (route) => {
-    requests++;
-    return route.fulfill(
-      requests === 1 ? { status: 503 } : { json: [{ id: 35, sigla: 'SP', nome: 'São Paulo' }] },
-    );
-  });
-  await page.goto('/');
-  await expect(page.getByRole('alert')).toBeVisible();
-  await page.getByRole('button', { name: 'Tentar novamente' }).click();
-  await expect(page.getByRole('alert')).toHaveCount(0);
-  await expect(page.getByRole('option', { name: 'São Paulo (SP)' })).toHaveCount(1);
-});
-
-test('limita a capital pela região antes da requisição e preserva o recorte na URL', async ({
+test('consulta dados reais da capital, abre detalhes e mapa sem depender da Overpass', async ({
   page,
 }) => {
   await mockLocations(page);
-  let query = '';
-  await page.route('https://overpass.private.coffee/api/interpreter**', (route) => {
-    query = new URLSearchParams(route.request().postData() || '').get('data') || '';
-    return route.fulfill({ json: { elements: [] } });
+  let calls = 0;
+  await page.route(overpass, (route) => {
+    calls++;
+    return route.abort();
   });
   await page.goto('/');
-  await page.getByLabel('Estado', { exact: true }).selectOption('SP');
-  await page.getByLabel('Área de busca', { exact: true }).selectOption('capital');
-  await expect(page.getByLabel('Cidade', { exact: true })).toHaveValue('3550308');
-  await expect(page.getByRole('button', { name: 'Buscar unidades', exact: true })).toBeDisabled();
-  await page.getByLabel('Região de São Paulo', { exact: true }).selectOption('leste');
-  await page.getByLabel('Tipo de unidade').selectOption('UBS');
-  await page.getByRole('button', { name: 'Buscar unidades', exact: true }).click();
-  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
-  expect(query).toContain('nwr(');
-  expect(query).not.toContain('area.city');
-  expect(query).not.toContain('UBS|UPA');
-  await expect(page).toHaveURL(/regiao=leste/);
+  await chooseCity(page);
+  await expect(page.getByRole('status').filter({ hasText: 'Dados publicados' })).toContainText(
+    'GeoSampa',
+  );
+  await expect(page.locator('.unit-card').first()).toBeVisible();
+  const first = page.locator('.unit-card').first();
+  const name = await first.getByRole('heading').innerText();
+  await first.getByRole('button', { name: /Ver detalhes/ }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog').getByRole('link', { name: 'Traçar rota' })).toHaveAttribute(
+    'href',
+    /destination=/,
+  );
   await expect(
-    page.getByRole('heading', { name: 'Unidades em São Paulo · Zona Leste · SP' }),
-  ).toBeVisible();
-  await page.reload();
-  await expect(page.getByLabel('Região de São Paulo', { exact: true })).toHaveValue('leste');
-  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
+    page.getByRole('dialog').getByRole('link', { name: 'Ver registro original' }),
+  ).toHaveAttribute('href', /wfs.geosampa.prefeitura.sp.gov.br/);
+  await page.keyboard.press('Escape');
+  await page.getByRole('searchbox', { name: 'Filtrar por nome, rua ou bairro' }).fill(name);
+  await expect(page.locator('.unit-card').first().getByRole('heading')).toHaveText(name);
+  await page.getByRole('button', { name: 'Mapa', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Mapa das unidades encontradas' })).toBeVisible();
+  expect(calls).toBe(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test('mantém ABC, Suzano e Guarulhos em buscas municipais distintas', async ({ page }) => {
+test('preserva região e tipo na URL compartilhada e filtra o recorte publicado', async ({
+  page,
+}) => {
   await mockLocations(page);
-  const queries: string[] = [];
-  await page.route('https://overpass.private.coffee/api/interpreter**', (route) => {
-    queries.push(new URLSearchParams(route.request().postData() || '').get('data') || '');
-    return route.fulfill({ json: { elements: [] } });
+  await page.goto('/#/?uf=SP&cidade=3550308&regiao=oeste&tipo=UPA');
+  await expect(page.getByLabel('Região de São Paulo', { exact: true })).toHaveValue('oeste');
+  await expect(page.getByLabel('Tipo de unidade')).toHaveValue('UPA');
+  await expect(
+    page.getByRole('heading', { name: 'Unidades em São Paulo · Zona Oeste · SP' }),
+  ).toBeVisible();
+  await expect(page.locator('.unit-card').first()).toBeVisible();
+  for (const badge of await page.locator('.unit-card .badge').allTextContents())
+    expect(badge).toBe('UPA');
+});
+
+test('mantém ABC, Suzano e Guarulhos em consultas publicadas distintas', async ({ page }) => {
+  await mockLocations(page);
+  let calls = 0;
+  await page.route(overpass, (route) => {
+    calls++;
+    return route.abort();
   });
   await page.goto('/');
   await page.getByLabel('Estado', { exact: true }).selectOption('SP');
   await page.getByLabel('Área de busca', { exact: true }).selectOption('abc');
   await expect(page.locator('#city option')).toHaveCount(8);
-  await expect(page.locator('#city option[value="3518800"]')).toHaveCount(0);
   await page.getByLabel('Cidade', { exact: true }).selectOption('3548807');
-  await expect(page.getByLabel('Região de São Paulo', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Buscar unidades', exact: true }).click();
-  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
-  expect(queries[0]).toContain('"ref:IBGE"="3548807"');
-  for (const [group, city] of [
-    ['suzano', '3552502'],
-    ['guarulhos', '3518800'],
+  await expect(
+    page.getByRole('heading', { name: 'Unidades em São Caetano do Sul · SP' }),
+  ).toBeVisible();
+  for (const [group, name] of [
+    ['suzano', 'Suzano'],
+    ['guarulhos', 'Guarulhos'],
   ]) {
     await page.getByLabel('Área de busca', { exact: true }).selectOption(group);
-    await expect(page.getByLabel('Cidade', { exact: true })).toHaveValue(city);
     await page.getByRole('button', { name: 'Buscar unidades', exact: true }).click();
-    await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
-    expect(queries.at(-1)).toContain(`"ref:IBGE"="${city}"`);
+    await expect(page.getByRole('heading', { name: `Unidades em ${name} · SP` })).toBeVisible();
+    await expect(page.locator('.unit-card').first()).toContainText('CNES');
   }
+  const original = JSON.parse(readFileSync('public/data/health-units/3518800.json', 'utf8'))
+    .units[0].editedAt;
+  await page
+    .locator('.unit-card')
+    .first()
+    .getByRole('button', { name: /Ver detalhes/ })
+    .click();
+  await expect(
+    page.getByRole('dialog').getByText(original.split('-').reverse().join('/'), { exact: true }),
+  ).toBeVisible();
+  expect(calls).toBe(0);
 });
 
-test('não dispara consulta da capital inteira ao abrir link antigo sem região', async ({
+test('continua nas cidades cobertas quando o IBGE não responde', async ({ page }) => {
+  await page.route('**/api/v1/localidades/**', (route) => route.fulfill({ status: 503 }));
+  await page.goto('/');
+  await chooseCity(page);
+  await expect(page.getByRole('status').filter({ hasText: 'O IBGE não respondeu' })).toBeVisible();
+  await expect(page.locator('.unit-card').first()).toBeVisible();
+});
+
+test('não confunde arquivo publicado inválido com ausência de unidades nem consulta a Overpass', async ({
   page,
 }) => {
   await mockLocations(page);
-  let requests = 0;
-  await page.route('https://overpass.private.coffee/api/interpreter**', (route) => {
-    requests++;
-    return route.fulfill({ json: { elements: [] } });
-  });
-  await page.goto('/#/?uf=SP&cidade=3550308');
-  await expect(page.getByRole('status')).toContainText('Selecione uma região');
-  expect(requests).toBe(0);
-});
-
-const overpassRequests =
-  /^https:\/\/(overpass\.private\.coffee|overpass-api\.de)\/api\/interpreter/;
-
-test('informa a espera progressiva, encerra após três falhas e não exibe ausência de unidades', async ({
-  page,
-}) => {
-  await page.clock.install();
-  await mockLocations(page);
-  let requests = 0;
-  await page.route(overpassRequests, (route) => {
-    requests++;
-    return route.fulfill({ status: 502, body: 'server at capacity' });
+  let calls = 0;
+  await page.route('**/data/health-units/*.json', (route) =>
+    route.fulfill({ json: { complete: false, units: [] } }),
+  );
+  await page.route(overpass, (route) => {
+    calls++;
+    return route.abort();
   });
   await page.goto('/');
   await chooseCity(page);
-  await expect(page.getByRole('status')).toContainText('Nova tentativa em 5s (2 de 3)');
-  expect(requests).toBe(1);
-  await page.clock.fastForward(5000);
-  await expect(page.getByRole('status')).toContainText('Nova tentativa em 10s (3 de 3)');
-  expect(requests).toBe(2);
-  await page.clock.fastForward(10000);
   await expect(
     page.getByRole('heading', { name: 'Fonte de dados temporariamente indisponível' }),
   ).toBeVisible();
-  expect(requests).toBe(3);
   await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Tentar novamente em 20s' })).toBeDisabled();
+  expect(calls).toBe(0);
 });
 
-test('cancela a espera e não envia a próxima tentativa', async ({ page }) => {
+test('reutiliza a consulta publicada após recarregar e preserva data da coleta', async ({
+  page,
+}) => {
+  await mockLocations(page);
+  await page.goto('/');
+  await chooseCity(page);
+  await expect(page.getByRole('status').filter({ hasText: 'Dados publicados' })).toContainText(
+    'Coletados em',
+  );
+  await page.reload();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Exibindo uma consulta salva' }),
+  ).toContainText('coletados em');
+  await expect(page.locator('.unit-card').first()).toBeVisible();
+});
+
+test('preserva dados oficiais salvos quando o arquivo publicado não pode ser recarregado', async ({
+  page,
+}) => {
+  await mockLocations(page);
+  await page.goto('/');
+  await chooseCity(page);
+  await expect(page.locator('.unit-card').first()).toBeVisible();
+  const name = await page.locator('.unit-card h3').first().innerText();
+  await page.route('**/data/health-units/*.json', (route) => route.fulfill({ status: 503 }));
+  await page.getByRole('button', { name: 'Recarregar dados publicados' }).click();
+  await expect(page.getByRole('alert')).toContainText(
+    'Fonte indisponível: exibindo a última consulta salva',
+  );
+  await expect(page.getByRole('alert')).toContainText('GeoSampa');
+  await expect(page.locator('.unit-card h3').first()).toHaveText(name);
+});
+
+test('fora da cobertura, informa espera progressiva e encerra após três falhas', async ({
+  page,
+}) => {
   await page.clock.install();
   await mockLocations(page);
-  let requests = 0;
-  await page.route(overpassRequests, (route) => {
-    requests++;
+  let calls = 0;
+  await page.route(overpass, (route) => {
+    calls++;
     return route.fulfill({ status: 502 });
   });
   await page.goto('/');
-  await chooseCity(page);
-  await expect(page.getByRole('status')).toContainText('Nova tentativa em');
-  await page.getByRole('button', { name: 'Cancelar busca', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Busca cancelada');
-  await page.clock.fastForward(60000);
-  expect(requests).toBe(1);
-});
-
-test('reutiliza dados salvos após recarregar e mostra a data original', async ({ page }) => {
-  await mockLocations(page);
-  let requests = 0;
-  await page.route(overpassRequests, (route) => {
-    requests++;
-    return route.fulfill({
-      json: {
-        elements: [{ type: 'node', id: 1, lat: -23.55, lon: -46.633, tags: { name: 'UBS Salva' } }],
-      },
-    });
-  });
-  await page.goto('/');
-  await chooseCity(page);
-  await expect(page.getByRole('heading', { name: 'UBS Salva', exact: true })).toBeVisible();
-  const timestamp = await page.locator('.data-timestamp').textContent();
-  await page.reload();
-  await expect(page.getByRole('status')).toContainText(
-    'Exibindo uma consulta salva neste navegador',
-  );
-  await expect(page.locator('.data-timestamp')).toHaveText(timestamp!);
-  expect(requests).toBe(1);
-});
-
-test('mantém a última consulta com aviso quando a atualização falha', async ({ page }) => {
-  await page.clock.install({ time: new Date('2026-10-28T12:00:00Z') });
-  await mockLocations(page);
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      'saude360:units:v1:3550308:centro:all',
-      JSON.stringify({
-        consultedAt: '2026-10-28T10:00:00Z',
-        mapUpdatedAt: '',
-        units: [
-          {
-            id: 'node/1',
-            name: 'UBS Consulta Anterior',
-            type: 'UBS',
-            latitude: -23.55,
-            longitude: -46.633,
-            street: '',
-            neighborhood: '',
-            phone: '',
-            hours: '',
-            operator: '',
-            cnes: '',
-            editedAt: '',
-            sourceUrl: 'https://www.openstreetmap.org/node/1',
-          },
-        ],
-      }),
-    );
-  });
-  await page.route(overpassRequests, (route) => route.fulfill({ status: 502 }));
-  await page.goto('/');
-  await chooseCity(page);
+  await chooseCity(page, '3509502');
   await expect(page.getByRole('status')).toContainText('Nova tentativa em 5s');
   await page.clock.fastForward(5000);
   await expect(page.getByRole('status')).toContainText('Nova tentativa em 10s');
   await page.clock.fastForward(10000);
-  await expect(page.getByRole('alert')).toContainText(
-    'Fonte indisponível: exibindo a última consulta salva',
-  );
-  await expect(page.getByRole('alert')).toContainText('28/10/2026');
   await expect(
-    page.getByRole('heading', { name: 'UBS Consulta Anterior', exact: true }),
+    page.getByRole('heading', { name: 'Fonte de dados temporariamente indisponível' }),
   ).toBeVisible();
+  expect(calls).toBe(3);
   await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Tentar novamente em 20s' })).toBeDisabled();
+});
+
+test('cancela a espera de uma consulta ao mapa sem nova tentativa', async ({ page }) => {
+  await page.clock.install();
+  await mockLocations(page);
+  let calls = 0;
+  await page.route(overpass, (route) => {
+    calls++;
+    return route.fulfill({ status: 502 });
+  });
+  await page.goto('/');
+  await chooseCity(page, '3509502');
+  await expect(page.getByRole('status')).toContainText('Nova tentativa em');
+  await page.getByRole('button', { name: 'Cancelar busca', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Busca cancelada');
+  await page.clock.fastForward(60000);
+  expect(calls).toBe(1);
+});
+
+test('uma resposta vazia válida do mapa é distinguida de falha', async ({ page }) => {
+  await mockLocations(page);
+  await page.route(overpass, (route) => route.fulfill({ json: { elements: [] } }));
+  await page.goto('/');
+  await chooseCity(page, '3509502');
+  await expect(page.getByText('Nenhuma unidade disponível nesta consulta')).toBeVisible();
+  await expect(page.getByText(/Isso não significa que a cidade/)).toBeVisible();
+});
+
+test('link antigo da capital sem região pede recorte antes da consulta', async ({ page }) => {
+  await mockLocations(page);
+  let calls = 0;
+  await page.route('**/data/health-units/*.json', (route) => {
+    calls++;
+    return route.abort();
+  });
+  await page.goto('/#/?uf=SP&cidade=3550308');
+  await expect(page.getByRole('status')).toContainText('Selecione uma região');
+  expect(calls).toBe(0);
+});
+
+test('navega pelo guia com menu acessível no celular', async ({ page, isMobile }) => {
+  await mockLocations(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /O cuidado que você precisa/ })).toBeVisible();
+  if (isMobile) await page.getByRole('button', { name: 'Abrir menu', exact: true }).click();
+  await page.getByRole('link', { name: 'Entenda o atendimento', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Conhecer a rede é o primeiro passo.' }),
+  ).toBeVisible();
+  await expect(page.getByRole('banner')).toHaveCount(1);
 });

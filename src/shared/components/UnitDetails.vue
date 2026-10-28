@@ -3,10 +3,11 @@ import Dialog from 'primevue/dialog';
 import type { HealthUnit } from '@/shared/types/health';
 import { routeUrl } from '@/shared/services/healthUnits';
 import Icon from './Icon.vue';
+import { unitSourceLabel } from '@/shared/services/healthValidation';
 defineProps<{ unit: HealthUnit | null }>();
 defineEmits<{ close: [] }>();
 function formatDate(value: string): string {
-  const date = new Date(value);
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value);
   return Number.isNaN(date.getTime()) ? 'Não informada' : date.toLocaleDateString('pt-BR');
 }
 function phoneHref(phone: string): string {
@@ -25,7 +26,12 @@ function phoneHref(phone: string): string {
   >
     <div v-if="unit" class="unit-details">
       <span class="badge" :class="{ 'badge-upa': unit.type === 'UPA' }"
-        >{{ unit.type }} · identificada pelo nome no mapa</span
+        >{{ unit.type }} ·
+        {{
+          unit.dataSource && unit.dataSource !== 'osm'
+            ? unitSourceLabel(unit)
+            : 'identificada pelo nome no mapa'
+        }}</span
       >
       <dl>
         <div>
@@ -55,13 +61,13 @@ function phoneHref(phone: string): string {
           <dd>{{ unit.cnes }}</dd>
         </div>
         <div>
-          <dt>Última edição do registro no mapa</dt>
+          <dt>Atualização do registro informada pela fonte</dt>
           <dd>{{ formatDate(unit.editedAt) }}</dd>
         </div>
       </dl>
       <p class="notice">
-        Confirme o atendimento e os horários com a unidade. O cadastro no mapa não confirma
-        funcionamento, vínculo com o SUS ou disponibilidade de serviços.
+        Confirme o atendimento e os horários com a unidade. Os dados publicados não confirmam
+        funcionamento atual ou disponibilidade de serviços.
       </p>
       <div class="detail-actions">
         <a :href="routeUrl(unit)" target="_blank" rel="noopener noreferrer" class="primary-button"

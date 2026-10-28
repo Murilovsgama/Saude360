@@ -37,6 +37,7 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.setSystemTime(now);
   vi.resetModules();
+  vi.doMock('../src/shared/services/publishedUnits', () => ({ hasPublishedUnits: () => false }));
   storage = new MemoryStorage();
   vi.stubGlobal('localStorage', storage);
   service = await import('../src/shared/services/healthUnits');

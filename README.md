@@ -1,112 +1,116 @@
 # Saúde360
 
-Um guia para encontrar UBS e UPA mapeadas na sua cidade, consultar informações de contato e planejar como chegar.
+Guia de unidades de saúde com Vue 3, TypeScript e mapas. Permite consultar UBS e UPA, filtrar por região, conferir informações de contato e traçar uma rota.
 
-O objetivo é aproximar a população das informações sobre a rede de saúde, com uma interface simples, responsiva e sem necessidade de cadastro.
+A primeira consulta funciona sem depender da Overpass nas dez cidades com dados oficiais publicados. A interface mostra a fonte e a data da coleta, sem apresentar os dados como disponibilidade de atendimento em tempo real.
+
+## Cobertura publicada
+
+Esta versão inclui **776 registros reais com coordenadas**, coletados em 28/10/2026:
+
+| Cidade                | Registros | Fonte    |
+| --------------------- | --------: | -------- |
+| São Paulo             |       512 | GeoSampa |
+| Diadema               |        22 | CNES     |
+| Mauá                  |        26 | CNES     |
+| Ribeirão Pires        |        12 | CNES     |
+| Rio Grande da Serra   |         9 | CNES     |
+| Santo André           |        40 | CNES     |
+| São Bernardo do Campo |        44 | CNES     |
+| São Caetano do Sul    |        13 | CNES     |
+| Guarulhos             |        72 | CNES     |
+| Suzano                |        26 | CNES     |
+
+As contagens representam o recorte incluído no projeto, não o total oficial de unidades existentes. Na capital, os filtros por Centro, Zona Leste, Norte, Oeste e Sul são aplicados aos dados publicados. As demais cidades podem ser consultadas pelo OpenStreetMap/Overpass, dependendo da disponibilidade e cobertura desse serviço.
 
 ## Funcionalidades
 
-- Busca por estado e município, com recorte obrigatório por Centro, Zona Leste, Norte, Oeste ou Sul na capital paulista.
-- Atalhos para Grande ABC, Suzano e Guarulhos; cada consulta continua restrita a um município.
-- Filtros por tipo de unidade, nome, rua e bairro.
-- Resultados em lista com paginação e mapa interativo.
-- Detalhes com endereço, telefone, horário e responsável, quando disponíveis na fonte.
-- Link para traçar rota e consultar o registro original.
-- URL compartilhável com município, região, tipo e termo da busca no momento do envio do formulário.
-- Guia sobre UBS e UPA e página de fontes e transparência.
-- Estados de carregamento, erro, tentativa novamente e ausência de resultados.
+- Busca por estado, município, região da capital e tipo de unidade.
+- Atalhos para capital, Grande ABC, Guarulhos e Suzano.
+- Filtros por nome, rua e bairro; lista paginada e mapa interativo.
+- Endereço, telefone, turno/horário e responsável, quando disponíveis na fonte.
+- Link de rota e acesso ao registro original de cada unidade.
+- URL compartilhável com município, região, tipo e termo da busca.
+- Fonte e data de coleta visíveis para os dados publicados.
+- Cache com data, mensagens de indisponibilidade e cancelamento de consultas ao mapa.
+- Guia UBS/UPA e página de cobertura e transparência.
 
-## Tecnologias
+## Como os dados chegam ao site
 
-Vue 3, TypeScript, Vite, PrimeVue, Tailwind CSS e Leaflet. Vitest para testes dos serviços e Playwright para testes de navegação em desktop e celular.
+A aplicação continua **inteiramente front-end**, sem backend, banco de dados, autenticação ou chaves privadas.
 
-A aplicação é inteiramente front-end. Não possui backend, banco de dados, autenticação nem chaves privadas.
+As APIs oficiais do CNES e GeoSampa responderam à coleta, mas não expuseram CORS para acesso direto do navegador. O script `scripts/update-health-data.py` coleta essas fontes fora do navegador, valida e publica arquivos JSON estáticos em `public/data/health-units/`. O site carrega somente o arquivo do município escolhido e filtra os resultados localmente. Não há proxy público intermediário.
 
-## Fontes públicas
+No navegador, a primeira consulta das cidades cobertas não depende de uma consulta anterior bem-sucedida nem de um servidor Overpass disponível. Se o IBGE falhar, a interface permite continuar com a lista das cidades publicadas, informando a redução da cobertura.
 
-| Fonte                                                                            | Uso                                                                             |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [IBGE — Localidades](https://servicodados.ibge.gov.br/api/docs/localidades)      | Estados, municípios e seus códigos.                                             |
-| [OpenStreetMap — Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API) | Consulta de locais de saúde mapeados dentro do município.                       |
-| [GeoSampa — Subprefeituras](https://geosampa.prefeitura.sp.gov.br/)              | Limites das cinco regiões da capital, agrupados a partir das 32 subprefeituras. |
-| [OpenStreetMap — mapas](https://www.openstreetmap.org/copyright)                 | Camada visual do mapa. Dados © colaboradores do OpenStreetMap, sob ODbL.        |
-| [Ministério da Saúde](https://www.gov.br/saude/)                                 | Referências do guia de atendimento.                                             |
+### Seleção e integridade
 
-Fora da capital, a consulta Overpass usa a área administrativa identificada pelo código IBGE de sete dígitos. Em São Paulo, um retângulo geográfico da região selecionada reduz a busca no servidor; os resultados são refinados no navegador pelos polígonos do GeoSampa. Assim, uma busca na Zona Leste não carrega todas as unidades da capital. O tipo de unidade também é aplicado na consulta externa. As unidades são selecionadas pelo nome e pelas marcações de saúde do OpenStreetMap. Essa identificação é indicativa: não comprova vínculo com o SUS ou funcionamento atual. Locais explicitamente marcados como privados são excluídos.
+- **Capital:** registros municipais/estaduais/federais do GeoSampa; tipo cadastrado para UBS e identificação de UPA pelo nome na camada de urgência/emergência. AMA sem identificação de UBS ou UPA não é incluída.
+- **Outras nove cidades:** CNES com status ativo solicitado, tipo 2 para UBS e tipo 73 para candidatos a UPA. São mantidos registros que informam atendimento ambulatorial SUS e cujo nome identifica UBS, Saúde da Família, Posto/Centro de Saúde ou UPA. Serviços especializados sem essa identificação e unidades com indicação de acesso prisional/restrito são excluídos. Essa regra reduz a cobertura e não equivale a uma certificação de acesso irrestrito.
+- Registros sem coordenadas válidas são contabilizados como excluídos nos metadados, sem inventar posições.
+- A coleta percorre todas as páginas e rejeita paginação repetida, filtros ignorados, coleção incompleta ou duplicada. Na API testada, `offset` é deslocamento de registros (0, 20, 40...), apesar da descrição da documentação sugerir páginas.
+- A publicação só começa após concluir e validar todos os municípios. Falhas não substituem os recortes anteriores.
+- São publicados apenas os campos necessários ao guia. Não são incluídos dados de pacientes, CPF, CNPJ ou e-mail.
 
-Não há dados fictícios de unidades como alternativa às APIs. Uma resposta vazia é apresentada como ausência de resultados no mapa, sem afirmar que o município não tem atendimento.
+Cada arquivo informa origem, começo/fim da coleta, quantidade e registros excluídos. A data da coleta difere da data de atualização de cada cadastro. Os dados podem ficar desatualizados até uma nova coleta e publicação.
 
-### Limitações
+## Atualizar os recortes
 
-- O mapa é colaborativo: nomes, endereços e cobertura podem estar incompletos ou desatualizados.
-- A classificação por nome pode deixar de encontrar unidades ou incluir registros que precisam de confirmação.
-- Municípios sem área administrativa reconhecida na fonte podem retornar uma lista vazia.
-- Os resultados e contagens não representam o cadastro oficial nem o total de unidades do município.
-- A data da consulta é diferente da data da última edição de cada registro.
-- Não há informação de filas, lotação, médicos disponíveis, agendamento ou serviços em tempo real.
-- APIs públicas podem ficar indisponíveis, limitar requisições ou alterar o CORS. A interface permite tentar novamente e oferece acesso ao [CNES oficial](https://cnes.datasus.gov.br/).
+Requer Python 3, sem dependências adicionais:
 
-O endpoint CNES avaliado não retornou o cabeçalho CORS necessário para uma integração direta no navegador. Ele não é consumido por um proxy externo. Por isso, esta versão utiliza OpenStreetMap e apresenta o CNES apenas como referência oficial externa.
+```bash
+python scripts/update-health-data.py
+```
 
-### Indisponibilidade, tentativas e cache
+O comando consulta as fontes oficiais e atualiza os dez arquivos e `src/shared/data/publishedCities.json`. Revise as alterações e publique uma nova versão do site. O workflow manual **Coletar dados de saúde** gera um artefato para revisão; ele não cria commits automaticamente nem altera a `main`. Não há atualização periódica automática configurada.
 
-Cada busca pode realizar no máximo três chamadas sequenciais à Overpass, alternando as duas instâncias públicas. Falhas de rede, timeout e respostas de sobrecarga usam esperas de 5 e 10 segundos antes das novas tentativas. Para HTTP 429/406, o mínimo é de 30 e 60 segundos. O cabeçalho `Retry-After`, quando exposto pelo servidor, prevalece se indicar um prazo maior. Esperas acima de 60 segundos interrompem as tentativas automáticas e informam quando será possível tentar novamente.
-
-A tela informa a tentativa e a contagem regressiva e permite cancelar a busca, incluindo a espera. Após falhas, um intervalo mínimo também bloqueia novas chamadas feitas manualmente. Esse intervalo vale para as buscas da aplicação e é preservado ao recarregar a página quando o navegador permite armazenamento local.
-
-Respostas completas e válidas são salvas no navegador, separadas por município, região e tipo. O cache é reutilizado por 15 minutos e retido por até sete dias, limitado às 20 últimas consultas. A interface identifica os dados salvos e mostra a data original da consulta. O botão de atualização permite consultar a fonte novamente, respeitando o intervalo de espera.
-
-Quando a fonte falha, uma consulta anterior com unidades pode ser exibida com aviso de indisponibilidade e dados possivelmente desatualizados. Sem dados anteriores utilizáveis, é apresentada uma mensagem de indisponibilidade, nunca uma lista vazia atribuída à falha. Respostas com erro ou incompletas não substituem o cache. Um resultado vazio só representa ausência de registros na consulta quando foi recebido com sucesso; resultados vazios antigos não são usados como alternativa durante falhas.
-
-O cache contém filtros e informações públicas das unidades, sem dados de pacientes ou geolocalização do visitante. Se o armazenamento for bloqueado ou ficar sem espaço, a consulta continua funcionando com cache em memória. Os provedores externos recebem as requisições normais do navegador.
-
-### Limites regionais de São Paulo
-
-O arquivo `src/shared/data/saoPauloRegions.json` contém um recorte dos polígonos públicos de subprefeituras do GeoSampa, agrupados pelo campo `nm_regiao_05`. A geometria é simplificada com tolerância de 0,00005 grau (cerca de cinco metros). O filtro serve para navegação, não para fins cadastrais; registros nas divisas podem variar.
-
-A origem, a data de obtenção e a tolerância estão registradas no arquivo. O site não depende do WFS do GeoSampa durante cada busca. Para atualizar o recorte a partir da fonte pública:
+Os limites regionais da capital vêm das subprefeituras do GeoSampa, agrupadas pelo campo `nm_regiao_05` e simplificadas com tolerância de 0,00005 grau (cerca de cinco metros). São adequados para navegação, não para fins cadastrais. Para atualizar:
 
 ```bash
 python scripts/update-sp-regions.py
 ```
 
-As sete cidades do Grande ABC são Diadema, Mauá, Ribeirão Pires, Rio Grande da Serra, Santo André, São Bernardo do Campo e São Caetano do Sul, conforme o [Consórcio Intermunicipal Grande ABC](https://consorcioabc.sp.gov.br/). Suzano e Guarulhos são opções municipais próprias, sem serem tratadas como zonas da capital.
+## Cache e consultas fora da cobertura
 
-## Executar
+Resultados válidos são reutilizados por 15 minutos e retidos por até sete dias neste navegador, com limite de 20 consultas por cidade, região e tipo. Se a atualização falhar, uma consulta anterior com unidades pode ser exibida com aviso e a data original. Respostas com erro ou incompletas não sobrescrevem o cache. Um resultado vazio só é mostrado após uma consulta válida; uma falha não é interpretada como ausência de atendimento.
 
-Requer Node.js 22.12 ou superior e npm.
+Fora das cidades publicadas, a Overpass mantém no máximo três chamadas sequenciais com espera de 5 e 10 segundos para falhas temporárias. HTTP 429/406 usa no mínimo 30 e 60 segundos. `Retry-After` prevalece quando exposto; esperas acima de 60 segundos interrompem as tentativas automáticas. A espera pode ser cancelada e o intervalo também é respeitado em novas buscas manuais.
+
+O OpenStreetMap é colaborativo: classificação pelo nome não comprova vínculo com o SUS, registros explicitamente privados são excluídos e a cobertura pode estar incompleta. A disponibilidade dessas consultas continua dependente dos servidores públicos.
+
+## Tecnologias e execução
+
+Vue 3, TypeScript, Vite, PrimeVue, Tailwind CSS e Leaflet. Vitest para serviços e Playwright para navegação em desktop e celular.
+
+Requer Node.js 22.12 ou superior:
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Não é necessário criar arquivo `.env`.
-
-## Verificar
+Não é necessário criar `.env` ou coletar os dados para executar: os recortes reais já estão no repositório.
 
 ```bash
 npm run lint:ci
 npm run test
+npm run test:data
 npm run build
 npx playwright install chromium
 npm run test:e2e
 ```
 
-Os testes automatizados de navegação interceptam as APIs com respostas controladas, incluindo erros e resultados vazios. Não garantem a disponibilidade dos serviços públicos e não consomem os servidores de mapas durante a execução.
+Os testes validam os arquivos reais publicados e o fluxo dessas cidades sem chamar a Overpass. Falhas externas e localidades são simuladas nos testes de navegação para execução previsível; a atualização dos dados oficiais é um processo separado.
 
-## Estrutura
+## Fontes e limitações
 
-```text
-src/
-  pages/                  # Busca, guia, fontes e página não encontrada
-  router/                 # Rotas em hash para hospedagem estática
-  shared/
-    components/           # Navegação, cartões, detalhes e mapa
-    Layout/               # Estrutura compartilhada das páginas
-    services/             # Consultas HTTP, localidades e unidades
-    types/                # Tipos da aplicação e das respostas
-```
+- [GeoSampa](https://geosampa.prefeitura.sp.gov.br/): unidades e limites da capital.
+- [API de Dados Abertos do Ministério da Saúde](https://apidadosabertos.saude.gov.br/): CNES dos demais municípios publicados.
+- [IBGE — Localidades](https://servicodados.ibge.gov.br/api/docs/localidades): estados e municípios.
+- [OpenStreetMap / Overpass](https://wiki.openstreetmap.org/wiki/Overpass_API): consultas fora da cobertura publicada e mapa. Dados © colaboradores do OpenStreetMap, sob [ODbL](https://www.openstreetmap.org/copyright).
+- [Ministério da Saúde](https://www.gov.br/saude/): referências do guia UBS/UPA.
+
+O projeto é independente. Não realiza agendamentos nem informa filas, lotação, médicos disponíveis ou serviços em tempo real. Confirme o atendimento e o funcionamento com a unidade ou a Secretaria de Saúde.
 
 ## Hospedagem
 
@@ -115,6 +119,4 @@ npm run build
 npm run preview
 ```
 
-Publique a pasta `dist` em uma hospedagem estática. A base relativa e as rotas em hash permitem servir o projeto em um subdiretório, sem regras de reescrita no servidor.
-
-Os servidores públicos da Overpass e do OpenStreetMap têm capacidade limitada. O projeto não faz consultas automáticas em segundo plano nem baixa mapas para uso offline. Para um volume maior de acessos, é necessário reavaliar os provedores e suas [políticas de uso](https://operations.osmfoundation.org/policies/tiles/).
+Publique toda a pasta `dist`, incluindo `data/`. A base relativa e as rotas em hash permitem hospedagem estática em subdiretórios. Os recortes publicados não precisam de um servidor de aplicação; os mapas e consultas fora da cobertura seguem as políticas dos respectivos provedores.

@@ -1,37 +1,99 @@
 <script setup lang="ts">
 import Icon from '@/shared/components/Icon.vue';
+import { publishedCities } from '@/shared/services/publishedUnits';
+function date(value: string): string {
+  return new Date(value).toLocaleDateString('pt-BR');
+}
 </script>
 <template>
   <div class="page-content reading-page">
     <span class="eyebrow">FONTES E TRANSPARÊNCIA</span>
-    <h1>Dados abertos.<br /><em>Informação com contexto.</em></h1>
+    <h1>Dados públicos.<br /><em>Informação com contexto.</em></h1>
     <p class="page-intro">
-      O Saúde360 reúne informações para facilitar a busca por unidades de saúde. É um projeto
+      O Saúde360 facilita a consulta de informações sobre unidades de saúde. É um projeto
       independente, sem vínculo com o SUS ou com órgãos públicos.
     </p>
     <section class="reading-card">
+      <h2>Cidades com dados publicados</h2>
+      <p>
+        Nestas cidades, a busca carrega um recorte real coletado das fontes oficiais e publicado com
+        o site. Ela funciona desde o primeiro acesso, sem consultar a Overpass. Os dados são
+        atualizados quando uma nova coleta é publicada, e não em tempo real.
+      </p>
+      <table class="coverage-table">
+        <caption>
+          Recorte disponível nesta versão
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Cidade</th>
+            <th scope="col">Registros</th>
+            <th scope="col">Coleta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="city in publishedCities" :key="city.id">
+            <th scope="row">{{ city.nome }}</th>
+            <td>{{ city.units }}</td>
+            <td>{{ date(city.collectedAt) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        As contagens correspondem aos registros incluídos no recorte, com coordenadas válidas. Não
+        representam necessariamente todas as unidades existentes. Os filtros por região e tipo podem
+        reduzir os resultados.
+      </p>
+    </section>
+    <section class="reading-card">
       <h2>De onde vêm as informações?</h2>
       <div class="source-row">
-        <span class="section-icon"><Icon name="pin" /></span>
+        <span class="section-icon"><Icon name="hospital" /></span>
         <div>
-          <h3>IBGE · Localidades</h3>
-          <p>Estados, municípios e códigos geográficos usados para delimitar a busca.</p>
+          <h3>GeoSampa · Prefeitura de São Paulo</h3>
+          <p>
+            Na capital, são utilizados registros de UBS e UPA da Prefeitura. UBS são selecionadas
+            pelo tipo cadastrado; UPA, pelo nome no conjunto de urgência e emergência. Também usamos
+            os limites simplificados das cinco regiões da cidade.
+          </p>
           <a
-            href="https://servicodados.ibge.gov.br/api/docs/localidades"
+            href="https://geosampa.prefeitura.sp.gov.br/"
             target="_blank"
             rel="noopener noreferrer"
             class="text-button"
-            >Documentação da API <Icon name="external" :size="14"
+            >Consultar GeoSampa <Icon name="external" :size="14"
+          /></a>
+        </div>
+      </div>
+      <div class="source-row">
+        <span class="section-icon"><Icon name="info" /></span>
+        <div>
+          <h3>CNES · Ministério da Saúde</h3>
+          <p>
+            Grande ABC, Guarulhos e Suzano usam o CNES. O recorte solicita estabelecimentos ativos e
+            mantém os que informam atendimento ambulatorial pelo SUS. O tipo cadastrado e o nome
+            identificam UBS e UPA. Serviços especializados fora do escopo e registros com indicação
+            de acesso prisional/restrito são excluídos. Turnos de atendimento, quando fornecidos,
+            não indicam lotação ou disponibilidade atual.
+          </p>
+          <a
+            href="https://apidadosabertos.saude.gov.br/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-button"
+            >Consultar a fonte dos dados <Icon name="external" :size="14"
           /></a>
         </div>
       </div>
       <div class="source-row">
         <span class="section-icon"><Icon name="map" /></span>
         <div>
-          <h3>OpenStreetMap · Overpass API</h3>
+          <h3>OpenStreetMap · Demais cidades e mapa</h3>
           <p>
-            Unidades, coordenadas e informações de endereço, telefone e horário, quando cadastradas.
-            O mapa é mantido por colaboradores e pode conter dados incompletos ou desatualizados.
+            Fora da cobertura publicada, a busca depende da Overpass e do cadastro colaborativo do
+            OpenStreetMap. A identificação pelo nome não comprova vínculo com o SUS. A cobertura e a
+            disponibilidade variam; os locais explicitamente privados são excluídos. A camada visual
+            do mapa também usa OpenStreetMap.
           </p>
           <a
             href="https://www.openstreetmap.org/copyright"
@@ -45,74 +107,61 @@ import Icon from '@/shared/components/Icon.vue';
       <div class="source-row">
         <span class="section-icon"><Icon name="pin" /></span>
         <div>
-          <h3>GeoSampa · Prefeitura de São Paulo</h3>
+          <h3>IBGE · Localidades</h3>
           <p>
-            Limites das cinco regiões da capital, agrupados pelas subprefeituras e simplificados em
-            cerca de cinco metros. O recorte é atualizado junto ao projeto.
+            Fornece estados e municípios. Se a consulta ao IBGE falhar, exibimos as cidades com
+            dados publicados, com um aviso, para permitir continuar a busca.
           </p>
           <a
-            href="https://geosampa.prefeitura.sp.gov.br/"
+            href="https://servicodados.ibge.gov.br/api/docs/localidades"
             target="_blank"
             rel="noopener noreferrer"
             class="text-button"
-            >Consultar a fonte dos limites <Icon name="external" :size="14"
+            >Documentação da fonte <Icon name="external" :size="14"
           /></a>
         </div>
       </div>
     </section>
     <div class="guide-grid">
       <section class="reading-card">
-        <h2>Como os resultados são selecionados</h2>
+        <h2>Datas e atualização</h2>
         <p>
-          A busca considera locais de saúde mapeados dentro do município. Na capital paulista, é
-          necessário escolher uma das cinco regiões: a consulta usa um retângulo menor e refina os
-          resultados com limites simplificados do GeoSampa. Os limites são aproximados em alguns
-          metros, especialmente nas divisas. A identificação de UBS e UPA usa o nome cadastrado,
-          incluindo termos como Unidade Básica, Saúde da Família e Pronto Atendimento.
+          A data da coleta indica quando os dados foram obtidos da fonte. A data da consulta indica
+          quando você carregou os resultados. A atualização de um registro é mostrada separadamente,
+          quando informada pela fonte.
         </p>
         <p>
-          Essa classificação é indicativa e não comprova vínculo com o SUS. Registros explicitamente
-          marcados como privados são excluídos. A lista não é um cadastro oficial nem representa
-          todas as unidades existentes.
+          O botão de recarregar busca a versão publicada no site; não atualiza o cadastro oficial.
+          Endereços, horários e contatos podem ter mudado. Nas divisas da capital, os limites
+          simplificados podem variar em alguns metros.
         </p>
       </section>
       <section class="reading-card">
-        <h2>Atualização e privacidade</h2>
+        <h2>Cache e privacidade</h2>
         <p>
-          Consultas válidas podem ser reutilizadas por 15 minutos e ficam salvas neste navegador por
-          até sete dias, com limite de 20 consultas. A tela identifica quando os dados são salvos e
-          mostra a data original da consulta, que é diferente da última edição do cadastro.
-        </p>
-        <p>
-          Se a fonte estiver indisponível, podemos exibir uma consulta anterior com unidades, com
-          aviso de que os dados podem ter mudado. Sem dados salvos utilizáveis, informamos a
-          indisponibilidade; uma falha não é apresentada como ausência de atendimento.
-        </p>
-        <p>
-          As tentativas são limitadas e têm espera progressiva, com opção de cancelamento. O
-          intervalo indicado pela API é respeitado quando está disponível.
+          Resultados válidos são reutilizados por 15 minutos e podem ficar salvos por até sete dias
+          neste navegador, com limite de 20 consultas. Se uma atualização falhar, mostramos os dados
+          anteriores com aviso e data. Sem dados válidos disponíveis, mostramos indisponibilidade.
         </p>
         <p>
           Não há cadastro, dados de pacientes, rastreadores ou solicitação de geolocalização. O
-          cache armazena os filtros da consulta e informações públicas das unidades no seu
-          navegador. As APIs e o mapa recebem as requisições normais do navegador; links de rota
-          abrem um serviço externo.
+          cache contém filtros e informações públicas das unidades. Fontes externas e mapas recebem
+          as requisições normais do navegador. Links de rota abrem outro serviço.
         </p>
       </section>
     </div>
     <section class="reading-card">
       <h2>Confirme antes de se deslocar</h2>
       <p>
-        Não exibimos filas, lotação, médicos disponíveis ou agendamentos. Quando um dado não está
-        disponível, isso é informado na interface. Consulte a unidade ou a Secretaria de Saúde para
-        confirmar os serviços e o funcionamento.
+        O Saúde360 não realiza agendamentos nem informa filas, médicos disponíveis ou serviços em
+        tempo real. Confirme o funcionamento e o atendimento com a unidade ou a Secretaria de Saúde.
       </p>
       <a
         class="secondary-button"
         href="https://cnes.datasus.gov.br/"
         target="_blank"
         rel="noopener noreferrer"
-        >Abrir o cadastro oficial CNES <Icon name="external" :size="16"
+        >Abrir o CNES oficial <Icon name="external" :size="16"
       /></a>
     </section>
   </div>

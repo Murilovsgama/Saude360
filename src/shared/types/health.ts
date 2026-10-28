@@ -22,12 +22,16 @@ export interface HealthUnit {
   cnes: string;
   editedAt: string;
   sourceUrl: string;
+  dataSource?: 'osm' | 'geosampa' | 'cnes';
 }
 export interface SearchResult {
   units: HealthUnit[];
   consultedAt: string;
   mapUpdatedAt: string;
-  source: 'network' | 'cache';
+  source: 'network' | 'cache' | 'published';
+  publishedAt?: string;
+  publishedRevision?: string;
+  sourceName?: string;
   stale: boolean;
   availabilityMessage?: string;
   retryAt?: number;

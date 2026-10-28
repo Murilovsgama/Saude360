@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { HealthUnit } from '@/shared/types/health';
 import Icon from './Icon.vue';
+import { unitSourceLabel } from '@/shared/services/healthValidation';
 defineProps<{ unit: HealthUnit }>();
 defineEmits<{ select: [unit: HealthUnit] }>();
 </script>
@@ -19,7 +20,7 @@ defineEmits<{ select: [unit: HealthUnit] }>();
       >
     </p>
     <div class="unit-card-bottom">
-      <span>OpenStreetMap</span
+      <span>{{ unitSourceLabel(unit) }}</span
       ><button
         class="text-button"
         :aria-label="`Ver detalhes de ${unit.name}`"

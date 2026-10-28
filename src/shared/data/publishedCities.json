@@ -1,0 +1,82 @@
+[
+  {
+    "id": "3513801",
+    "nome": "Diadema",
+    "collectedAt": "2026-10-28T19:37:02.858932+00:00",
+    "units": 22,
+    "sourceName": "CNES · Ministério da Saúde",
+    "revision": "0f263608549ac7e0e66031ecb4207bcadb4b8b31f3bec93196b962fe2d6f037f"
+  },
+  {
+    "id": "3518800",
+    "nome": "Guarulhos",
+    "collectedAt": "2026-10-28T19:37:31.184469+00:00",
+    "units": 72,
+    "sourceName": "CNES · Ministério da Saúde",
+    "revision": "9edb6b6c01a0bdd5e81118f64508c80a93d9e01d5bb5aea93397c6c8e0b512c6"
+  },
+  {
+    "id": "3529401",
+    "nome": "Mauá",
+    "collectedAt": "2026-10-28T19:37:03.250380+00:00",
+    "units": 26,
+    "sourceName": "CNES · Ministério da Saúde",
+    "revision": "6a3a0740f0326f2400a02ff85d4f2e525500c14ab9937e114aabc7605d4c3908"
+  },
+  {
+    "id": "3543303",
+    "nome": "Ribeirão Pires",
+    "collectedAt": "2026-10-28T19:37:07.788106+00:00",
+    "units": 12,
+    "sourceName": "CNES · Ministério da Saúde",
+    "revision": "8c7a58cfbb303808ef9ea7c649dfc88521fee4bea24568553c0c14652d104a3e"
+  },
+  {
+    "id": "3544103",
+    "nome": "Rio Grande da Serra",
+    "collectedAt": "2026-10-28T19:37:17.119922+00:00",
+    "units": 9,
+    "sourceName": "CNES · Ministério da Saúde",
+    "revision": "5ad6ad4b584c27491476fced38d6c57376677389bb88f1445b7c5bf782b22735"
+  },
+  {
+    "id": "3547809",
+    "nome": "Santo André",
+    "collectedAt": "2026-10-28T19:37:17.256195+00:00",
+    "units": 40,
+    "sourceName": "CNES · Ministério da Saúde",
+    "revision": "a5d07edab626504710d042a89780ddb84115fbae1cf2293c7d49eb90469b1732"
+  },
+  {
+    "id": "3552502",
+    "nome": "Suzano",
+    "collectedAt": "2026-10-28T19:37:31.195768+00:00",
+    "units": 26,
+    "sourceName": "CNES · Ministério da Saúde",
+    "revision": "b36bbf849171178172895b63c573631af9ca2dc0a2f63a88c8989894bf815e6c"
+  },
+  {
+    "id": "3548708",
+    "nome": "São Bernardo do Campo",
+    "collectedAt": "2026-10-28T19:37:17.128009+00:00",
+    "units": 44,
+    "sourceName": "CNES · Ministério da Saúde",
+    "revision": "21f3c1fe6cb943fb194eeba5583f837ead89aa0ac0383d37728b5765c78cb208"
+  },
+  {
+    "id": "3548807",
+    "nome": "São Caetano do Sul",
+    "collectedAt": "2026-10-28T19:37:26.132101+00:00",
+    "units": 13,
+    "sourceName": "CNES · Ministério da Saúde",
+    "revision": "0ca49ad64071d01bfb9c3ab8f8d6417973817d96537635271d7834745658cdb5"
+  },
+  {
+    "id": "3550308",
+    "nome": "São Paulo",
+    "collectedAt": "2026-10-28T19:37:02.212867+00:00",
+    "units": 512,
+    "sourceName": "GeoSampa · Prefeitura de São Paulo",
+    "revision": "d53175d7bce70dbf5a32126a3de911b589a17bea9a001c9e696f6a16320c1249"
+  }
+]

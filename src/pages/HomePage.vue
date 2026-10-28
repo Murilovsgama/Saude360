@@ -6,6 +6,7 @@ import UnitCard from '@/shared/components/UnitCard.vue';
 import UnitDetails from '@/shared/components/UnitDetails.vue';
 const UnitsMap = defineAsyncComponent(() => import('@/shared/components/UnitsMap.vue'));
 import { getStates, getCities } from '@/shared/services/locations';
+import { hasPublishedUnits } from '@/shared/services/publishedUnits';
 import {
   getHealthUnits,
   normalizeText,
@@ -46,6 +47,16 @@ const loadingStates = ref(false);
 const loadingCities = ref(false);
 const searching = ref(false);
 const locationError = ref('');
+const locationFallback = ref(false);
+const selectedHasPublishedData = computed(() => hasPublishedUnits(city.value));
+const publicationDate = computed(() =>
+  result.value?.publishedAt
+    ? new Date(result.value.publishedAt).toLocaleString('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      })
+    : '',
+);
 const searchError = ref('');
 const progress = ref<SearchProgress | null>(null);
 const retryUntil = ref(0);
@@ -119,7 +130,9 @@ async function loadStates(): Promise<void> {
   const controller = new AbortController();
   statesController = controller;
   try {
-    states.value = await getStates(controller.signal);
+    states.value = await getStates(controller.signal, () => {
+      locationFallback.value = true;
+    });
   } catch (error) {
     if (!controller.signal.aborted)
       locationError.value = errorMessage(
@@ -142,7 +155,9 @@ async function loadCities(): Promise<void> {
   }
   loadingCities.value = true;
   try {
-    cities.value = await getCities(state.value, controller.signal);
+    cities.value = await getCities(state.value, controller.signal, () => {
+      locationFallback.value = true;
+    });
   } catch (error) {
     if (!controller.signal.aborted)
       locationError.value = errorMessage(
@@ -442,9 +457,16 @@ function clearFilters(): void {
           Tentar novamente <Icon name="arrow" :size="16" />
         </button>
       </div>
+      <p v-if="locationFallback" class="area-help" role="status">
+        O IBGE não respondeu. Exibindo as cidades com dados publicados para você continuar a
+        consulta.
+      </p>
       <p class="search-footnote">
-        <Icon name="info" :size="14" /> Dados colaborativos do OpenStreetMap. A cobertura varia por
-        município.
+        <Icon name="info" :size="14" />{{
+          selectedHasPublishedData
+            ? 'Esta cidade tem dados publicados de fonte oficial; a busca não depende da Overpass.'
+            : 'Dados publicados para a capital, Grande ABC, Guarulhos e Suzano. Outras cidades usam o mapa colaborativo.'
+        }}
       </p>
     </section>
     <section v-if="searching" class="results-section" aria-live="polite" aria-busy="true">
@@ -456,8 +478,11 @@ function clearFilters(): void {
         de {{ progress.maxAttempts }}).
       </p>
       <p v-else class="muted">
-        Consultando a área selecionada. Tentativa {{ progress?.attempt || 1 }} de
-        {{ progress?.maxAttempts || 3 }}.
+        {{
+          selectedHasPublishedData
+            ? 'Carregando os dados publicados desta cidade.'
+            : `Consultando a área selecionada. Tentativa ${progress?.attempt || 1} de ${progress?.maxAttempts || 3}.`
+        }}
       </p>
       <button class="secondary-button cancel-search" @click="cancelSearch">Cancelar busca</button>
       <div class="unit-grid">
@@ -483,6 +508,16 @@ function clearFilters(): void {
       /></a>
     </section>
     <section v-else-if="result" class="results-section" aria-labelledby="results-title">
+      <div v-if="result.source === 'published'" class="cache-notice" role="status">
+        <div>
+          <strong>Dados publicados · {{ result.sourceName }}</strong>
+          <p>
+            Coletados em {{ publicationDate }}. Este recorte não é uma consulta em tempo real;
+            confirme horários e atendimento com a unidade.
+          </p>
+        </div>
+        <button class="secondary-button" @click="search(true)">Recarregar dados publicados</button>
+      </div>
       <div
         v-if="result.source === 'cache'"
         class="cache-notice"
@@ -503,6 +538,9 @@ function clearFilters(): void {
                 : 'Os resultados foram reutilizados para evitar uma nova chamada à API.'
             }}
           </p>
+          <p v-if="result.publishedAt">
+            {{ result.sourceName }} · dados coletados em {{ publicationDate }}.
+          </p>
         </div>
         <button class="secondary-button" :disabled="retrySeconds > 0" @click="search(true)">
           {{ retrySeconds > 0 ? `Atualizar em ${retrySeconds}s` : 'Atualizar dados' }}
@@ -514,7 +552,8 @@ function clearFilters(): void {
           <h2 id="results-title">Unidades em {{ searchedCity }}</h2>
           <p class="muted" aria-live="polite">
             {{ filtered.length }}
-            {{ filtered.length === 1 ? 'unidade encontrada' : 'unidades encontradas' }} no mapa
+            {{ filtered.length === 1 ? 'unidade encontrada' : 'unidades encontradas' }}
+            {{ result.publishedAt ? 'no recorte publicado' : 'no mapa' }}
             <span aria-hidden="true">·</span> {{ counts.UBS }} UBS e {{ counts.UPA }} UPA nesta
             consulta
           </p>
@@ -585,8 +624,8 @@ function clearFilters(): void {
         </nav></template
       >
       <p class="data-timestamp">
-        Consulta realizada em {{ consultationDate }}. Os resultados não representam o total oficial
-        de unidades da cidade.
+        Consulta realizada em {{ consultationDate }}. Os resultados podem não incluir todas as
+        unidades da cidade.
       </p>
     </section>
     <section v-else class="how-it-works" aria-labelledby="how-title">

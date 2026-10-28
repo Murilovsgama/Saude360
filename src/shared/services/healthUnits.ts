@@ -8,6 +8,7 @@ import {
   setCooldown,
 } from './searchCache';
 import { MAX_ATTEMPTS, isRetryable, retryDelay, waitForRetry, type SearchProgress } from './retry';
+import { getPublishedUnits, hasPublishedUnits, publishedVersion } from './publishedUnits';
 import { capitalId, getCapitalRegion, unitInRegion } from './regions';
 
 const endpoints = [
@@ -112,6 +113,35 @@ export async function getHealthUnits(
 ): Promise<SearchResult> {
   const query = buildQuery(cityId, options);
   const cacheKey = `${cityId}:${options.region || 'all'}:${options.type || 'all'}`;
+  if (hasPublishedUnits(cityId)) {
+    signal?.throwIfAborted();
+    const previous = readSearchCache(cacheKey);
+    const saved = previous?.publishedRevision === publishedVersion(cityId) ? previous : undefined;
+    if (
+      saved?.publishedAt &&
+      !options.refresh &&
+      Date.now() - Date.parse(saved.consultedAt) < CACHE_FRESH_MS
+    )
+      return { ...saved, source: 'cache', stale: false };
+    options.onProgress?.({ phase: 'request', attempt: 1, maxAttempts: 1 });
+    try {
+      const result = await getPublishedUnits(cityId, options, signal);
+      saveSearchCache(cacheKey, result);
+      return result;
+    } catch {
+      signal?.throwIfAborted();
+      if (saved?.publishedAt && saved.units.length)
+        return {
+          ...saved,
+          source: 'cache',
+          stale: true,
+          availabilityMessage: 'Não foi possível recarregar os dados publicados.',
+        };
+      throw new Error(
+        'Não foi possível carregar os dados publicados desta cidade. Verifique a conexão e tente novamente.',
+      );
+    }
+  }
   signal?.throwIfAborted();
   const saved = readSearchCache(cacheKey);
   if (saved && !options.refresh && Date.now() - Date.parse(saved.consultedAt) < CACHE_FRESH_MS)

@@ -1,39 +1,19 @@
-import type { HealthUnit, SearchResult } from '@/shared/types/health';
+import type { SearchResult } from '@/shared/types/health';
+
+import { isHealthUnit } from './healthValidation';
 
 const prefix = 'saude360:units:v1:';
 const cooldownKey = 'saude360:overpass:retry-at:v1';
 export const CACHE_FRESH_MS = 15 * 60 * 1000;
 export const CACHE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const maxEntries = 20;
-type Snapshot = Pick<SearchResult, 'units' | 'consultedAt' | 'mapUpdatedAt'>;
+type Snapshot = Pick<
+  SearchResult,
+  'units' | 'consultedAt' | 'mapUpdatedAt' | 'publishedAt' | 'publishedRevision' | 'sourceName'
+>;
 const memory = new Map<string, Snapshot>();
 let memoryCooldown = 0;
 
-function isUnit(value: unknown): value is HealthUnit {
-  if (!value || typeof value !== 'object') return false;
-  const unit = value as HealthUnit;
-  const textFields = [
-    'name',
-    'street',
-    'neighborhood',
-    'phone',
-    'hours',
-    'operator',
-    'cnes',
-    'editedAt',
-  ] as const;
-  return (
-    typeof unit.id === 'string' &&
-    /^(node|way|relation)\/\d+$/.test(unit.id) &&
-    textFields.every((field) => typeof unit[field] === 'string') &&
-    ['UBS', 'UPA'].includes(unit.type) &&
-    Number.isFinite(unit.latitude) &&
-    Math.abs(unit.latitude) <= 90 &&
-    Number.isFinite(unit.longitude) &&
-    Math.abs(unit.longitude) <= 180 &&
-    unit.sourceUrl === `https://www.openstreetmap.org/${unit.id}`
-  );
-}
 function isSnapshot(value: unknown): value is Snapshot {
   if (!value || typeof value !== 'object') return false;
   const data = value as Snapshot;
@@ -44,8 +24,14 @@ function isSnapshot(value: unknown): value is Snapshot {
     age >= 0 &&
     age <= CACHE_RETENTION_MS &&
     typeof data.mapUpdatedAt === 'string' &&
+    (data.publishedAt === undefined ||
+      (typeof data.publishedAt === 'string' && Number.isFinite(Date.parse(data.publishedAt)))) &&
+    (data.publishedRevision === undefined ||
+      (typeof data.publishedRevision === 'string' &&
+        /^[a-f0-9]{64}$/.test(data.publishedRevision))) &&
+    (data.sourceName === undefined || typeof data.sourceName === 'string') &&
     Array.isArray(data.units) &&
-    data.units.every(isUnit)
+    data.units.every(isHealthUnit)
   );
 }
 export function readSearchCache(key: string): Snapshot | undefined {
@@ -79,6 +65,9 @@ export function saveSearchCache(key: string, result: Snapshot): void {
     units: result.units,
     consultedAt: result.consultedAt,
     mapUpdatedAt: result.mapUpdatedAt,
+    publishedAt: result.publishedAt,
+    publishedRevision: result.publishedRevision,
+    sourceName: result.sourceName,
   };
   memory.delete(key);
   memory.set(key, snapshot);
