@@ -1,28 +1,34 @@
 <script setup lang="ts">
-const emit = defineEmits(['toggle-sidebar'])
+import Icon from './Icon.vue';
+defineProps<{ open: boolean }>();
+defineEmits<{ 'toggle-sidebar': [] }>();
 </script>
-
 <template>
-  <header class="h-14 bg-white border-b border-gray-200 flex items-center px-5 gap-3 shadow-sm">
-    <button
-      class="md:hidden w-9 h-9 flex flex-col justify-center items-center gap-[5px] rounded-lg hover:bg-gray-100 transition"
-      @click="emit('toggle-sidebar')"
-      aria-label="Abrir menu"
+  <header class="topbar">
+    <RouterLink to="/" class="brand" aria-label="Saúde360, início"
+      ><span class="brand-symbol"><Icon name="cross" :size="25" /></span
+      ><span
+        >saúde<span class="brand-number">360</span><small>INFORMAÇÃO QUE APROXIMA</small></span
+      ></RouterLink
     >
-      <span class="block h-0.5 w-5 bg-gray-600 rounded" />
-      <span class="block h-0.5 w-3.5 bg-gray-400 rounded" />
-      <span class="block h-0.5 w-5 bg-gray-600 rounded" />
-    </button>
-
-    <div class="flex items-center gap-2">
-      <svg class="w-6 h-6 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-      </svg>
-      <span class="font-bold text-gray-800 text-base tracking-tight">
-        Saúde<span class="text-teal-600">360</span>
-      </span>
+    <div class="topbar-right">
+      <span class="public-data"><span /> Dados abertos, acesso livre</span
+      ><a
+        class="github-link"
+        href="https://github.com/Murilovsgama/Saude360"
+        target="_blank"
+        rel="noopener noreferrer"
+        >GitHub <Icon name="external" :size="14" /></a
+      ><button
+        id="menu-toggle"
+        class="icon-button mobile-menu"
+        :aria-expanded="open"
+        aria-controls="navigation"
+        :aria-label="open ? 'Fechar menu' : 'Abrir menu'"
+        @click="$emit('toggle-sidebar')"
+      >
+        <Icon :name="open ? 'close' : 'menu'" />
+      </button>
     </div>
-
-
   </header>
 </template>

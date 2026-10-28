@@ -1,7 +1,7 @@
 {
   "name": "Saude360",
   "version": "1.0.0",
-  "private": false,
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,23 +17,21 @@
     "build:prod": "vite build --mode prod",
     "preview:dev": "npm run build:dev && npm run preview",
     "preview:hml": "npm run build:hml && npm run preview",
-    "preview:prod": "npm run build:prod && npm run preview"
+    "preview:prod": "npm run build:prod && npm run preview",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@primeuix/themes": "^2.0.3",
-    "axios": "^1.7.9",
-    "ci": "^2.3.0",
-    "fs-extra": "^11.2.0",
-    "lodash": "^4.17.21",
-    "pinia": "^2.2.6",
+    "leaflet": "^1.9.4",
     "primevue": "^4.5.5",
     "vue": "^3.5.13",
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tsconfig/node22": "^22.0.0",
-    "@types/fs-extra": "^11.0.4",
-    "@types/lodash": "^4.17.13",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^22.10.2",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/eslint-config-prettier": "^10.1.0",
@@ -48,7 +46,8 @@
     "tailwindcss": "^3.4.17",
     "typescript": "~5.6.3",
     "vite": "^6.0.1",
-    "vite-plugin-vue-devtools": "^7.6.5",
+    "vitest": "^5.0.5",
     "vue-tsc": "^2.1.10"
-  }
+  },
+  "description": "Guia de unidades de saúde com Vue 3, mapas e APIs públicas"
 }
